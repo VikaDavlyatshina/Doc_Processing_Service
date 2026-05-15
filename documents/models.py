@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-# from .validators import validate_file_type
+from .validators import check_document_file
 from config import settings
 
 
@@ -41,7 +41,8 @@ class Document(models.Model):
     # Сам файл
     file = models.FileField(
         upload_to=user_document_path,
-        verbose_name='Файл'
+        verbose_name='Файл',
+        validators=[check_document_file],
     )
 
     # Статус
@@ -60,10 +61,13 @@ class Document(models.Model):
     )
 
     # Даты
+
+    # Дата загрузки
     uploaded_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Дата загрузки'
     )
+    # Дата обновления
     updated_at = models.DateTimeField(
         auto_now=True,
         verbose_name='Дата обновления'
