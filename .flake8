@@ -1,0 +1,19 @@
+[flake8]
+# Максимальная длина строки (как в PEP8)
+max-line-length = 119
+
+# Папки и файлы, которые НЕ нужно проверять
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    .eggs,
+    *.egg,
+    migrations,
+
+# Игнорируемые ошибки
+ignore =
+    E501,
+    W503,
+    E203,
