@@ -1,10 +1,12 @@
 from django.db import models
 from django.utils import timezone
-from .validators import check_document_file
+
 from config import settings
 
+from .validators import check_document_file
 
 # Create your models here.
+
 
 def user_document_path(instance, filename):
     """
@@ -12,66 +14,63 @@ def user_document_path(instance, filename):
     documents/user_{username}/YYYY-MM-DD/filename
     """
     # Берём email до @ как имя пользователя
-    username = instance.user.email.split('@')[0]
+    username = instance.user.email.split("@")[0]
 
     # Дата загрузки в формате ГГГГ-ММ-ДД (используем текущую дату)
-    date_str = timezone.now().strftime('%Y-%m-%d')
+    date_str = timezone.now().strftime("%Y-%m-%d")
 
     # Возвращаем путь: user_ivan/2026-01-15/passport.pdf
-    return f'documents/user_{username}/{date_str}/{filename}'
+    return f"documents/user_{username}/{date_str}/{filename}"
 
 
 class Document(models.Model):
     """Модель документа, загруженного пользователем."""
 
     STATUS_CHOICES = [
-        ('pending', 'На рассмотрении'),
-        ('approved', 'Подтверждён'),
-        ('rejected', 'Отклонён'),
+        ("pending", "На рассмотрении"),
+        ("approved", "Подтверждён"),
+        ("rejected", "Отклонён"),
     ]
 
     # Кто загрузил
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='documents',
-        verbose_name='Пользователь'
+        related_name="documents",
+        verbose_name="Пользователь",
     )
 
     # Сам файл
     file = models.FileField(
         upload_to=user_document_path,
-        verbose_name='Файл',
+        verbose_name="Файл",
         validators=[check_document_file],
+    )
+    # Комментарий владельца к файлу
+    user_note = models.TextField(
+        blank=True,
+        verbose_name='Комментарий владельца',
+        help_text='Пояснение к документу (для модератора)'
     )
 
     # Статус
     status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='pending',
-        verbose_name='Статус'
+        max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name="Статус"
     )
 
     # Комментарий (причина отклонения)
     comment = models.TextField(
         blank=True,
-        verbose_name='Комментарий',
-        help_text='Причина отклонения (заполняется администратором)'
+        verbose_name="Комментарий",
+        help_text="Причина отклонения (заполняется администратором)",
     )
 
     # Даты
 
     # Дата загрузки
-    uploaded_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name='Дата загрузки'
-    )
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата загрузки")
     # Дата обновления
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        verbose_name='Дата обновления'
-    )
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
 
     # Кто и когда проверил
     reviewed_by = models.ForeignKey(
@@ -79,23 +78,21 @@ class Document(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='reviewed_documents',
-        verbose_name='Проверил'
+        related_name="reviewed_documents",
+        verbose_name="Проверил",
     )
     reviewed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name='Дата проверки'
+        null=True, blank=True, verbose_name="Дата проверки"
     )
 
     class Meta:
-        verbose_name = 'Документ'
-        verbose_name_plural = 'Документы'
-        ordering = ['-uploaded_at']  # новые документы сверху
+        verbose_name = "Документ"
+        verbose_name_plural = "Документы"
+        ordering = ["-uploaded_at"]  # новые документы сверху
         permissions = [
-            ('can_approve_document', 'Может подтверждать документы'),
-            ('can_reject_document', 'Может отклонять документы'),
-            ('can_view_all_documents', 'Может просматривать все документы'),
+            ("can_approve_document", "Может подтверждать документы"),
+            ("can_reject_document", "Может отклонять документы"),
+            ("can_view_all_documents", "Может просматривать все документы"),
         ]
 
     def __str__(self):
@@ -103,15 +100,15 @@ class Document(models.Model):
 
     def approve(self, moderator):
         """Подтвердить документ."""
-        self.status = 'approved'           # 1. Меняем статус
-        self.reviewed_by = moderator       # 2. Запоминаем, кто подтвердил
+        self.status = "approved"  # 1. Меняем статус
+        self.reviewed_by = moderator  # 2. Запоминаем, кто подтвердил
         self.reviewed_at = timezone.now()  # 3. Запоминаем, когда подтвердили
-        self.save()                        # 4. Сохраняем всё в БД
+        self.save()  # 4. Сохраняем всё в БД
 
-    def reject(self, moderator, comment=''):
+    def reject(self, moderator, comment=""):
         """Отклонить документ."""
-        self.status = 'rejected'           # 1. Меняем статус
-        self.comment = comment             # 2. Сохраняем причину отклонения
-        self.reviewed_by = moderator       # 3. Кто отклонил
+        self.status = "rejected"  # 1. Меняем статус
+        self.comment = comment  # 2. Сохраняем причину отклонения
+        self.reviewed_by = moderator  # 3. Кто отклонил
         self.reviewed_at = timezone.now()  # 4. Когда отклонили
-        self.save()                        # 5. Сохраняем
+        self.save()  # 5. Сохраняем
