@@ -11,16 +11,19 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Локально читаем .env, в Docker переменные уже загружены через env_file
-if not os.path.exists("/.dockerenv"):
-    load_dotenv(".env", override=True)
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Загружаем .env только если мы НЕ в Docker
+if not os.path.exists("/.dockerenv"):
+    env_path = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(env_path, override=True)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -37,45 +40,53 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    # Приложения
-    'users',
-    'documents',
+    # Стандартные приложения Django
+    "django.contrib.admin",  # Админ-панель (yourdomain.ru/admin/)
+    "django.contrib.auth",  # Пользователи, группы, права доступа
+    "django.contrib.contenttypes",  # Связи между моделями (служебное)
+    "django.contrib.sessions",  # Хранение сессий пользователей
+    "django.contrib.messages",  # Всплывающие сообщения (успех, ошибка)
+    "django.contrib.staticfiles",  # Работа со статикой (CSS, JS, картинки)
+    # Сторонние библиотеки
+    "rest_framework",  # Django REST Framework — создание API
+    "rest_framework_simplejwt",  # JWT-токены для безопасной авторизации через API
+    "django_filters",  # Фильтрация данных в API (поиск, сортировка)
+    "django_celery_beat",  # Планировщик задач Celery (периодические задачи)
+    "drf_spectacular",  # Современная автодокументация API (OpenAPI 3.0)
+    "corsheaders",  # Разрешает запросы к API с других доменов (нужно для фронтенда)
+    # Приложения проекта
+    "users",
+    "documents",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / "templates"],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
@@ -122,7 +133,7 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en-us"
 
 # Часовой пояс
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 # Интернационализация (переводы на другие языки)
 USE_I18N = True
@@ -130,35 +141,31 @@ USE_I18N = True
 # Использовать часовые пояса (хранить время в UTC, показывать в локальном)
 USE_TZ = True
 
-
-# ============================================
-# СТАТИЧЕСКИЕ И МЕДИА ФАЙЛЫ
-# ============================================
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
-# URL для доступа к статике (CSS, JS, картинки сайта)
-STATIC_URL = "static/"
-
-# Где искать статические файлы
-if DEBUG:
-    # Разработка: ищем здесь
-    STATICFILES_DIRS = [BASE_DIR / "static"]
-else:
-    # Папка, куда collectstatic собирает ВСЮ статику для продакшена
-    # После деплоя запустить: python manage.py collectstatic
-    # Продакшен: собираем сюда
-    STATIC_ROOT = BASE_DIR / "staticfiles"
-
-# URL для доступа к медиа-файлам (загруженные пользователем файлы)
-MEDIA_URL = "media/"
-
-# Папка, где хранятся загруженные пользователями файлы
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
-
 # ТИП ПОЛЯ ПО УМОЛЧАНИЮ ДЛЯ ПЕРВИЧНЫХ КЛЮЧЕЙ
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ============================================
+# СТАТИКА И МЕДИА
+# ============================================
+
+# URL для доступа к статике (CSS, JS админки)
+STATIC_URL = "static/"
+
+# URL для доступа к загруженным пользователями файлам
+MEDIA_URL = "media/"
+
+# === ПАПКИ ДЛЯ ХРАНЕНИЯ ФАЙЛОВ ===
+
+# Папка, куда собираются все статические файлы из всех приложений
+# Для продакшена: после деплоя нужно выполнить python manage.py collectstatic
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+# Папка, куда сохраняются загруженные пользователями файлы (документы, аватары)
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Дополнительные папки со статикой (только в разработке)
+if DEBUG:
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # ============================================
 # КАСТОМНАЯ МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ
@@ -167,3 +174,35 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Вместо стандартной модели User используется своя (users.User)
 # Позволяет добавить свои поля (телефон, аватар, дата рождения)
 AUTH_USER_MODEL = "users.User"
+
+
+# ============================================
+# DJANGO REST FRAMEWORK
+# ============================================
+REST_FRAMEWORK = {
+    # Фильтрация по умолчанию (поиск и сортировка в API)
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+    # Способ аутентификации через JWT-токены (вместо сессий/куки)
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    # Доступ по умолчанию: только авторизованные пользователи
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    # Генератор OpenAPI-схемы для автодокументации
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ============================================
+# JWT (JSON Web Token)
+# ============================================
+
+SIMPLE_JWT = {
+    # Access-токен: короткий (30 минут), передаётся с каждым запросом
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    # Refresh-токен: длинный (1 день), нужен чтобы получить новый access
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Тип токена в заголовке: Authorization: Bearer <токен>
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
