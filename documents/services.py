@@ -2,10 +2,10 @@ from django.core.exceptions import ValidationError
 
 from documents.serializers import DocumentSerializer
 
-
 # ============================================================
 # 1. Проверка статуса документа
 # ============================================================
+
 
 def validate_document_status(document, expected_status):
     """
@@ -14,13 +14,14 @@ def validate_document_status(document, expected_status):
     """
     if document.status != expected_status:
         raise ValidationError(
-            f'Документ уже в статусе: {document.get_status_display()}'
+            f"Документ уже в статусе: {document.get_status_display()}"
         )
 
 
 # ============================================================
 # 2. Замена файла владельцем
 # ============================================================
+
 
 def replace_document_file(document, new_file, user):
     """
@@ -32,22 +33,19 @@ def replace_document_file(document, new_file, user):
 
     # Обновляем файл и отправляем на проверку
     document.file = new_file
-    document.status = 'pending'
+    document.status = "pending"
 
     # Сбрасываем старые данные модерации
     document.reviewed_by = None
     document.reviewed_at = None
-    document.comment = ''
+    document.comment = ""
 
     # Сохраняем изменения
     document.save()
 
     # Записываем действие в историю изменений
     document.log_action(
-        user=user,
-        action='file_updated',
-        old_status=old_status,
-        new_status='pending'
+        user=user, action="file_updated", old_status=old_status, new_status="pending"
     )
 
     # Возвращаем полные данные документа
@@ -59,6 +57,7 @@ def replace_document_file(document, new_file, user):
 # 3. Отправка на проверку (владелец)
 # ============================================================
 
+
 def send_document_to_review(document, user):
     """
     Отправляет черновик на проверку модератору.
@@ -68,15 +67,12 @@ def send_document_to_review(document, user):
     old_status = document.status
 
     # Меняем статус
-    document.status = 'pending'
+    document.status = "pending"
     document.save()
 
     # Логируем
     document.log_action(
-        user=user,
-        action='submitted',
-        old_status=old_status,
-        new_status='pending'
+        user=user, action="submitted", old_status=old_status, new_status="pending"
     )
 
     # Возвращаем полные данные документа
@@ -87,6 +83,7 @@ def send_document_to_review(document, user):
 # ============================================================
 # 4. Подтверждение документа (модератор)
 # ============================================================
+
 
 def approve_document(document, moderator):
     """
@@ -100,10 +97,7 @@ def approve_document(document, moderator):
 
     # Логируем
     document.log_action(
-        user=moderator,
-        action='approved',
-        old_status=old_status,
-        new_status='approved'
+        user=moderator, action="approved", old_status=old_status, new_status="approved"
     )
 
     # Возвращаем полные данные документа
@@ -114,6 +108,7 @@ def approve_document(document, moderator):
 # ============================================================
 # 5. Отклонение документа (модератор)
 # ============================================================
+
 
 def reject_document(document, moderator, comment):
     """
@@ -129,10 +124,10 @@ def reject_document(document, moderator, comment):
     # Логируем
     document.log_action(
         user=moderator,
-        action='rejected',
+        action="rejected",
         comment=comment,
         old_status=old_status,
-        new_status='rejected'
+        new_status="rejected",
     )
 
     # Возвращаем полные данные документа

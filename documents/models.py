@@ -9,21 +9,25 @@ from .validators import check_document_file
 
 
 class DocumentLog(models.Model):
-    """""Модель для хранения истории изменений и логирования действий с документом."""
+    """ ""Модель для хранения истории изменений и логирования действий с документом."""
 
     # Список действий для логирования
     ACTION_CHOICES = [
-        ('created', 'Создан'),
-        ('submitted', 'Отправлен на проверку'),
-        ('approved', 'Подтверждён'),
-        ('rejected', 'Отклонён'),
-        ('file_updated', 'Файл заменён'),
+        ("created", "Создан"),
+        ("submitted", "Отправлен на проверку"),
+        ("approved", "Подтверждён"),
+        ("rejected", "Отклонён"),
+        ("file_updated", "Файл заменён"),
     ]
 
     # К какому документу относится лог
-    document = models.ForeignKey('Document', on_delete=models.CASCADE, related_name='logs')
+    document = models.ForeignKey(
+        "Document", on_delete=models.CASCADE, related_name="logs"
+    )
     # Кто совершил действие
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
+    )
     # Тип действия
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     # Комментарий
@@ -37,10 +41,10 @@ class DocumentLog(models.Model):
 
     class Meta:
         # Сортировка: новые записи всегда будут вверху списка
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
         # Отображение названия модели в админ-панели Django
-        verbose_name = 'История документа'
-        verbose_name_plural = 'История документов'
+        verbose_name = "История документа"
+        verbose_name_plural = "История документов"
 
     def __str__(self):
         # Строковое представление лога для админки или отладки
@@ -89,8 +93,8 @@ class Document(models.Model):
     # Комментарий владельца к файлу
     user_note = models.TextField(
         blank=True,
-        verbose_name='Комментарий владельца',
-        help_text='Пояснение к документу (для модератора)'
+        verbose_name="Комментарий владельца",
+        help_text="Пояснение к документу (для модератора)",
     )
 
     # Статус
@@ -137,7 +141,7 @@ class Document(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.file.name} - {self.get_status_display()}"
 
-    def log_action(self, user, action, comment='', old_status=None, new_status=None):
+    def log_action(self, user, action, comment="", old_status=None, new_status=None):
         """Записывает действие в историю"""
         DocumentLog.objects.create(
             document=self,
@@ -145,7 +149,7 @@ class Document(models.Model):
             action=action,
             comment=comment,
             old_status=old_status or self.status,
-            new_status=new_status or self.status
+            new_status=new_status or self.status,
         )
 
     def approve(self, moderator):
@@ -158,9 +162,9 @@ class Document(models.Model):
 
         self.log_action(
             user=moderator,
-            action='approved',
+            action="approved",
             old_status=old_status,
-            new_status='approved'
+            new_status="approved",
         )
 
     def reject(self, moderator, comment=""):
@@ -174,8 +178,8 @@ class Document(models.Model):
 
         self.log_action(
             user=moderator,
-            action='rejected',
+            action="rejected",
             comment=comment,
             old_status=old_status,
-            new_status='rejected'
+            new_status="rejected",
         )
