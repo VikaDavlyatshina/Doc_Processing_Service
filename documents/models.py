@@ -8,6 +8,45 @@ from .validators import check_document_file
 # Create your models here.
 
 
+class DocumentLog(models.Model):
+    """""Модель для хранения истории изменений и логирования действий с документом."""
+
+    # Список действий для логирования
+    ACTION_CHOICES = [
+        ('created', 'Создан'),
+        ('submitted', 'Отправлен на проверку'),
+        ('approved', 'Подтверждён'),
+        ('rejected', 'Отклонён'),
+        ('file_updated', 'Файл заменён'),
+    ]
+
+    # К какому документу относится лог
+    document = models.ForeignKey('Document', on_delete=models.CASCADE, related_name='logs')
+    # Кто совершил действие
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    # Тип действия
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    # Комментарий
+    comment = models.TextField(blank=True)
+    # Статус до действия
+    old_status = models.CharField(max_length=20, blank=True)
+    # Статус после действия
+    new_status = models.CharField(max_length=20, blank=True)
+    # Дата создания лога (заполняется автоматически)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Сортировка: новые записи всегда будут вверху списка
+        ordering = ['-created_at']
+        # Отображение названия модели в админ-панели Django
+        verbose_name = 'История документа'
+        verbose_name_plural = 'История документов'
+
+    def __str__(self):
+        # Строковое представление лога для админки или отладки
+        return f"{self.document.id} - {self.action} - {self.created_at}"
+
+
 def user_document_path(instance, filename):
     """
     Сохраняет файл в структуру:
@@ -27,6 +66,7 @@ class Document(models.Model):
     """Модель документа, загруженного пользователем."""
 
     STATUS_CHOICES = [
+        ("draft", "Черновик"),
         ("pending", "На рассмотрении"),
         ("approved", "Подтверждён"),
         ("rejected", "Отклонён"),
@@ -55,12 +95,11 @@ class Document(models.Model):
 
     # Статус
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="pending", verbose_name="Статус"
+        max_length=20, choices=STATUS_CHOICES, default="draft", verbose_name="Статус"
     )
 
     # Комментарий (причина отклонения)
     comment = models.TextField(
-        blank=True,
         verbose_name="Комментарий",
         help_text="Причина отклонения (заполняется администратором)",
     )
@@ -98,17 +137,45 @@ class Document(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.file.name} - {self.get_status_display()}"
 
+    def log_action(self, user, action, comment='', old_status=None, new_status=None):
+        """Записывает действие в историю"""
+        DocumentLog.objects.create(
+            document=self,
+            user=user,
+            action=action,
+            comment=comment,
+            old_status=old_status or self.status,
+            new_status=new_status or self.status
+        )
+
     def approve(self, moderator):
         """Подтвердить документ."""
+        old_status = self.status  # ← сохраняем старый статус ДО изменения
         self.status = "approved"  # 1. Меняем статус
         self.reviewed_by = moderator  # 2. Запоминаем, кто подтвердил
         self.reviewed_at = timezone.now()  # 3. Запоминаем, когда подтвердили
         self.save()  # 4. Сохраняем всё в БД
 
+        self.log_action(
+            user=moderator,
+            action='approved',
+            old_status=old_status,
+            new_status='approved'
+        )
+
     def reject(self, moderator, comment=""):
         """Отклонить документ."""
+        old_status = self.status  # ← сохраняем старый статус ДО изменения
         self.status = "rejected"  # 1. Меняем статус
         self.comment = comment  # 2. Сохраняем причину отклонения
         self.reviewed_by = moderator  # 3. Кто отклонил
         self.reviewed_at = timezone.now()  # 4. Когда отклонили
         self.save()  # 5. Сохраняем
+
+        self.log_action(
+            user=moderator,
+            action='rejected',
+            comment=comment,
+            old_status=old_status,
+            new_status='rejected'
+        )
