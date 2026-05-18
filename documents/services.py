@@ -1,5 +1,7 @@
 from django.core.exceptions import ValidationError
 
+from documents.serializers import DocumentSerializer
+
 
 # ============================================================
 # 1. Проверка статуса документа
@@ -48,7 +50,9 @@ def replace_document_file(document, new_file, user):
         new_status='pending'
     )
 
-    return {'status': 'file_updated', 'file': document.file.url}
+    # Возвращаем полные данные документа
+    serializer = DocumentSerializer(document)
+    return serializer.data
 
 
 # ============================================================
@@ -75,7 +79,9 @@ def send_document_to_review(document, user):
         new_status='pending'
     )
 
-    return {'status': 'submitted'}
+    # Возвращаем полные данные документа
+    serializer = DocumentSerializer(document)
+    return serializer.data
 
 
 # ============================================================
@@ -100,7 +106,9 @@ def approve_document(document, moderator):
         new_status='approved'
     )
 
-    return {'status': 'approved'}
+    # Возвращаем полные данные документа
+    serializer = DocumentSerializer(document)
+    return serializer.data
 
 
 # ============================================================
@@ -127,4 +135,6 @@ def reject_document(document, moderator, comment):
         new_status='rejected'
     )
 
-    return {'status': 'rejected', 'comment': comment}
+    # Возвращаем полные данные документа
+    serializer = DocumentSerializer(document)
+    return serializer.data
