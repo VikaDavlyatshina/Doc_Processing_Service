@@ -1,17 +1,14 @@
-from rest_framework import permissions, viewsets, status
+from django.core.exceptions import PermissionDenied, ValidationError
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from documents.models import Document
-from documents.permissions import CanApproveDocument, CanRejectDocument, IsOwnerOnly
+from documents.permissions import IsOwnerOnly
 from documents.serializers import DocumentSerializer
-from documents.services import (
-    handle_file_update,
-    check_document_status,
-    handle_submit,
-    handle_approve,
-    handle_reject
-)
+from documents.services import (approve_document, reject_document,
+                                replace_document_file, send_document_to_review,
+                                validate_document_status)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -23,134 +20,192 @@ class DocumentViewSet(viewsets.ModelViewSet):
     - GET    /api/documents/           -> список документов
     - GET    /api/documents/{id}/      -> просмотр документа
     - DELETE /api/documents/{id}/      -> удалить документ
-    - POST   /api/documents/{id}/update-file/  -> заменить файл (владелец)
-    - POST   /api/documents/{id}/submit/      -> отправить на проверку
-    - POST   /api/documents/{id}/approve/     -> подтвердить (модератор)
-    - POST   /api/documents/{id}/reject/      -> отклонить (модератор)
     """
 
     serializer_class = DocumentSerializer
-    permission_classes = [permissions.IsAuthenticated]  # все действия требуют авторизации
 
-    # ================================================================
-    # 1. КАКИЕ ДОКУМЕНТЫ ПОКАЗЫВАТЬ
-    # ================================================================
+    # ============================================================
+    # 1. Какие документы показывать в списке
+    # ============================================================
 
     def get_queryset(self):
         """Возвращает список документов с учётом прав пользователя."""
         user = self.request.user
 
+        # Неавторизованные не видят ничего
         if not user.is_authenticated:
             return Document.objects.none()
 
-        # Модератор видит всё, кроме черновиков
+        # Модератор видит всё, кроме черновиков (их проверять не нужно)
         if user.has_perm("documents.can_view_all_documents"):
             return Document.objects.exclude(status="draft")
 
         # Обычный пользователь видит только свои документы
         return Document.objects.filter(user=user)
 
-    # ================================================================
-    # 2. КАКИЕ ПРАВА ПРОВЕРЯТЬ
-    # ================================================================
+    # ============================================================
+    # 2. Какие права проверять для каждого действия
+    # ============================================================
 
     def get_permissions(self):
-        """Добавляет дополнительные права (IsAuthenticated уже есть)."""
+        """Назначает права для разных действий."""
+        # Удалить документ может только владелец
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsOwnerOnly()]
 
-        # Только владелец
-        if self.action in ["destroy", "update_file", "submit"]:
-            return [IsOwnerOnly()]
+        # Для list, create, retrieve — достаточно авторизации
+        return [permissions.IsAuthenticated()]
 
-        # Только модератор с правом approve
-        if self.action == "approve":
-            return [CanApproveDocument()]
-
-        # Только модератор с правом reject
-        if self.action == "reject":
-            return [CanRejectDocument()]
-
-        # Для list, create, retrieve — только IsAuthenticated
-        return []
-
-    # ================================================================
-    # 3. СОЗДАНИЕ (автоматическая подстановка автора)
-    # ================================================================
+    # ============================================================
+    # 3. Создание документа (автор и запрет модераторам)
+    # ============================================================
 
     def perform_create(self, serializer):
-        """При создании документа подставляем текущего пользователя."""
-        document = serializer.save(user=self.request.user)
-        document.log_action(user=self.request.user, action='created', new_status='draft')
+        """
+        При создании:
+        - подставляем автора из токена
+        - запрещаем модераторам создавать документы
+        - логируем создание
+        """
+        user = self.request.user
 
-    # ================================================================
-    # 4. ЗАМЕНИТЬ ФАЙЛ (только владелец)
-    # ================================================================
+        # Модераторы не могут создавать документы (у них есть своя роль)
+        if user.has_perm("documents.can_approve_document") or user.has_perm(
+            "documents.can_reject_document"
+        ):
+            raise PermissionDenied("Модераторы не могут создавать документы")
 
-    @action(detail=True, methods=['post'])
+        # Создаём документ и логируем
+        document = serializer.save(user=user)
+        document.log_action(user=user, action="created", new_status="draft")
+
+
+class DocumentOwnerViewsSet(viewsets.GenericViewSet):
+    """
+    Действия, доступные только владельцу документа:
+    - POST /api/documents/{id}/update-file/   -> заменить файл
+    - POST /api/documents/{id}/submit/       -> отправить на проверку
+    """
+
+    # Все действия требуют авторизации и проверки, что пользователь — владелец
+    permission_classes = [permissions.IsAuthenticated(), IsOwnerOnly()]
+    serializer_class = DocumentSerializer
+
+    def get_queryset(self):
+        """Ограничиваем выборку только документами текущего пользователя."""
+        return Document.objects.filter(user=self.request.user)
+
+    # ============================================================
+    # 4. Замена файла (владелец)
+    # ============================================================
+
+    @action(detail=True, methods=["post"])
     def update_file(self, request, pk=None):
-        """Заменяет файл и сбрасывает статус в черновик."""
+        """
+        Заменяет файл и отправляет документ на повторную проверку.
+        Статус становится 'pending'.
+        """
         document = self.get_object()
-        new_file = request.FILES.get('file')
+        new_file = request.FILES.get("file")
 
+        # Проверяем, что файл передан
         if not new_file:
             return Response(
-                {'error': 'Файл не передан'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Файл не передан"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        result = handle_file_update(document, new_file)
+        # Вызываем бизнес-логику
+        result = replace_document_file(document, new_file, request.user)
         return Response(result)
 
-    # ================================================================
-    # 5. ОТПРАВИТЬ НА ПРОВЕРКУ (только владелец)
-    # ================================================================
+    # ============================================================
+    # 5. Отправка на проверку (владелец)
+    # ============================================================
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
-        """Отправляет черновик на проверку модератору."""
+        """
+        Отправляет черновик на проверку модератору.
+        Статус меняется с 'draft' на 'pending'.
+        """
         document = self.get_object()
 
-        error = check_document_status(document, 'draft')
-        if error:
-            return error
+        # Проверяем, что документ действительно в статусе "черновик"
+        try:
+            validate_document_status(document, "draft")
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = handle_submit(document)
+        # Отправляем на проверку
+        result = send_document_to_review(document, request.user)
         return Response(result)
 
-    # ================================================================
-    # 6. ПОДТВЕРДИТЬ (только модератор)
-    # ================================================================
 
-    @action(detail=True, methods=['post'])
+class DocumentModerationViewSet(viewsets.GenericViewSet):
+    """
+    Действия, доступные только модератору:
+    - POST /api/documents/{id}/approve/   -> подтвердить
+    - POST /api/documents/{id}/reject/   -> отклонить
+    """
+
+    permission_classes = [permissions.IsAuthenticated()]
+    queryset = Document.objects.all()
+
+    # ============================================================
+    # 6. Подтверждение документа (модератор)
+    # ============================================================
+
+    @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
-        """Подтверждает документ (статус -> approved)."""
+        """
+        Подтверждает документ. Статус становится 'approved'.
+        """
+        # Проверяем глобальное право (есть ли у пользователя роль модератора)
+        if not request.user.has_perm("documents.can_approve_document"):
+            raise PermissionDenied("У вас нет права подтверждать документы")
+
         document = self.get_object()
 
-        error = check_document_status(document, 'pending')
-        if error:
-            return error
+        # Проверяем, что документ ещё не обработан
+        try:
+            validate_document_status(document, "pending")
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = handle_approve(document, request.user)
+        # Подтверждаем
+        result = approve_document(document, request.user)
         return Response(result)
 
-    # ================================================================
-    # 7. ОТКЛОНИТЬ (только модератор)
-    # ================================================================
+    # ============================================================
+    # 7. Отклонение документа (модератор)
+    # ============================================================
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
-        """Отклоняет документ с обязательным комментарием."""
+        """
+        Отклоняет документ. Статус становится 'rejected'.
+        Комментарий с причиной обязателен.
+        """
+        # Проверяем глобальное право
+        if not request.user.has_perm("documents.can_reject_document"):
+            raise PermissionDenied("У вас нет права отклонять документы")
+
         document = self.get_object()
 
-        error = check_document_status(document, 'pending')
-        if error:
-            return error
+        # Проверяем, что документ ещё не обработан
+        try:
+            validate_document_status(document, "pending")
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        comment = request.data.get('comment', '').strip()
+        # Проверяем, что комментарий передан
+        comment = request.data.get("comment", "").strip()
         if not comment:
             return Response(
-                {'error': 'Укажите причину отклонения'},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Укажите причину отклонения"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = handle_reject(document, request.user, comment)
+        # Отклоняем
+        result = reject_document(document, request.user, comment)
         return Response(result)
