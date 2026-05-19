@@ -2,13 +2,12 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
 from documents.models import Document
 from documents.permissions import IsOwnerOnly
 from documents.serializers import DocumentSerializer
 from documents.services import (approve_document, reject_document,
                                 replace_document_file, send_document_to_review,
-                                validate_document_status)
+                                validate_document_status, create_document)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -24,9 +23,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     serializer_class = DocumentSerializer
 
-    # ============================================================
-    # 1. Какие документы показывать в списке
-    # ============================================================
 
     def get_queryset(self):
         """Возвращает список документов с учётом прав пользователя."""
@@ -43,10 +39,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
         # Обычный пользователь видит только свои документы
         return Document.objects.filter(user=user)
 
-    # ============================================================
-    # 2. Какие права проверять для каждого действия
-    # ============================================================
-
     def get_permissions(self):
         """Назначает права для разных действий."""
         # Удалить документ может только владелец
@@ -56,31 +48,20 @@ class DocumentViewSet(viewsets.ModelViewSet):
         # Для list, create, retrieve — достаточно авторизации
         return [permissions.IsAuthenticated()]
 
-    # ============================================================
-    # 3. Создание документа (автор и запрет модераторам)
-    # ============================================================
-
     def perform_create(self, serializer):
         """
-        При создании:
-        - подставляем автора из токена
-        - запрещаем модераторам создавать документы
-        - логируем создание
+        Создание документа
         """
         user = self.request.user
 
-        # Модераторы не могут создавать документы (у них есть своя роль)
-        if user.has_perm("documents.can_approve_document") or user.has_perm(
-            "documents.can_reject_document"
-        ):
+        # Модераторы не могут создавать доокументы
+        if user.groups.filter(name="Document Moderator").exists():
             raise PermissionDenied("Модераторы не могут создавать документы")
 
-        # Создаём документ и логируем
-        document = serializer.save(user=user)
-        document.log_action(user=user, action="created", new_status="draft")
+        create_document(user, serializer)
 
 
-class DocumentOwnerViewsSet(viewsets.GenericViewSet):
+class DocumentOwnerViewSet(viewsets.GenericViewSet):
     """
     Действия, доступные только владельцу документа:
     - POST /api/documents/{id}/update-file/   -> заменить файл
@@ -88,16 +69,10 @@ class DocumentOwnerViewsSet(viewsets.GenericViewSet):
     """
 
     # Все действия требуют авторизации и проверки, что пользователь — владелец
-    permission_classes = [permissions.IsAuthenticated(), IsOwnerOnly()]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOnly]
     serializer_class = DocumentSerializer
 
-    def get_queryset(self):
-        """Ограничиваем выборку только документами текущего пользователя."""
-        return Document.objects.filter(user=self.request.user)
-
-    # ============================================================
-    # 4. Замена файла (владелец)
-    # ============================================================
+    queryset = Document.objects.all()
 
     @action(detail=True, methods=["post"])
     def update_file(self, request, pk=None):
@@ -117,10 +92,6 @@ class DocumentOwnerViewsSet(viewsets.GenericViewSet):
         # Вызываем бизнес-логику
         result = replace_document_file(document, new_file, request.user)
         return Response(result)
-
-    # ============================================================
-    # 5. Отправка на проверку (владелец)
-    # ============================================================
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
@@ -148,21 +119,20 @@ class DocumentModerationViewSet(viewsets.GenericViewSet):
     - POST /api/documents/{id}/reject/   -> отклонить
     """
 
-    permission_classes = [permissions.IsAuthenticated()]
+    permission_classes = [permissions.IsAuthenticated]
     queryset = Document.objects.all()
 
-    # ============================================================
-    # 6. Подтверждение документа (модератор)
-    # ============================================================
+    def initial(self, request, *args, **kwargs):
+        """ Проверяем, что польщователь входит в число Модераторов """
+        super().initial(request, *args, **kwargs)
+        if not request.user.groups.filter(name="Document Moderator").exists():
+            raise PermissionDenied("Только для модераторов")
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         """
         Подтверждает документ. Статус становится 'approved'.
         """
-        # Проверяем глобальное право (есть ли у пользователя роль модератора)
-        if not request.user.has_perm("documents.can_approve_document"):
-            raise PermissionDenied("У вас нет права подтверждать документы")
 
         document = self.get_object()
 
@@ -176,19 +146,12 @@ class DocumentModerationViewSet(viewsets.GenericViewSet):
         result = approve_document(document, request.user)
         return Response(result)
 
-    # ============================================================
-    # 7. Отклонение документа (модератор)
-    # ============================================================
-
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         """
         Отклоняет документ. Статус становится 'rejected'.
         Комментарий с причиной обязателен.
         """
-        # Проверяем глобальное право
-        if not request.user.has_perm("documents.can_reject_document"):
-            raise PermissionDenied("У вас нет права отклонять документы")
 
         document = self.get_object()
 
@@ -198,13 +161,7 @@ class DocumentModerationViewSet(viewsets.GenericViewSet):
         except ValidationError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Проверяем, что комментарий передан
-        comment = request.data.get("comment", "").strip()
-        if not comment:
-            return Response(
-                {"error": "Укажите причину отклонения"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        comment = request.data.get("comment", "")
 
         # Отклоняем
         result = reject_document(document, request.user, comment)
