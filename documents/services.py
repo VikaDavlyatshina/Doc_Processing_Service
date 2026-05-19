@@ -1,6 +1,14 @@
 from django.core.exceptions import ValidationError
-
+from .tasks import notify_admin_new_document, notify_user_document_approved,notify_user_document_rejected
 from documents.serializers import DocumentSerializer
+
+
+def create_document(user, serializer):
+    """Создаёт документ и логирует создание"""
+    document = serializer.save(user=user)
+    document.log_action(user=user, action="created", new_status="draft")
+    return document
+
 
 # ============================================================
 # 1. Проверка статуса документа
@@ -48,6 +56,9 @@ def replace_document_file(document, new_file, user):
         user=user, action="file_updated", old_status=old_status, new_status="pending"
     )
 
+    # Отправляем сообщении админу о новом документе
+    notify_admin_new_document.delay(document.id)
+
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
     return serializer.data
@@ -75,6 +86,9 @@ def send_document_to_review(document, user):
         user=user, action="submitted", old_status=old_status, new_status="pending"
     )
 
+    # Отправляем уведомление админу о новом документе
+    notify_admin_new_document.delay(document.id)
+
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
     return serializer.data
@@ -89,16 +103,12 @@ def approve_document(document, moderator):
     """
     Подтверждает документ. Статус становится 'approved'.
     """
-    # Сохраняем исходный статус для истории
-    old_status = document.status
 
     # Вызываем метод модели
     document.approve(moderator=moderator)
 
-    # Логируем
-    document.log_action(
-        user=moderator, action="approved", old_status=old_status, new_status="approved"
-    )
+    # Отправляем уведомление пользователю о подтверждении
+    notify_user_document_approved.delay(document.id)
 
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
@@ -115,20 +125,12 @@ def reject_document(document, moderator, comment):
     Отклоняет документ с указанием причины.
     Статус становится 'rejected'.
     """
-    # Сохраняем исходный статус для истории
-    old_status = document.status
 
     # Вызываем метод модели
     document.reject(moderator=moderator, comment=comment)
 
-    # Логируем
-    document.log_action(
-        user=moderator,
-        action="rejected",
-        comment=comment,
-        old_status=old_status,
-        new_status="rejected",
-    )
+    # Отправляем уведомление пользователю об отклонении
+    notify_user_document_rejected.delay(document.id)
 
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
