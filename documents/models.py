@@ -9,7 +9,7 @@ from .validators import check_document_file
 
 
 class DocumentLog(models.Model):
-    """ ""Модель для хранения истории изменений и логирования действий с документом."""
+    """Модель для хранения истории изменений и логирования действий с документом."""
 
     # Список действий для логирования
     ACTION_CHOICES = [
@@ -90,11 +90,10 @@ class Document(models.Model):
         verbose_name="Файл",
         validators=[check_document_file],
     )
-    # Комментарий владельца к файлу
+    # Комментарий пользователя (обязательный при создании)
     user_note = models.TextField(
-        blank=True,
-        verbose_name="Комментарий владельца",
-        help_text="Пояснение к документу (для модератора)",
+        verbose_name="Комментарий пользователя",
+        help_text="Пояснение к документу",
     )
 
     # Статус
@@ -102,10 +101,11 @@ class Document(models.Model):
         max_length=20, choices=STATUS_CHOICES, default="draft", verbose_name="Статус"
     )
 
-    # Комментарий (причина отклонения)
+    # Комментарий администратора (только при отклонении)
     comment = models.TextField(
-        verbose_name="Комментарий",
-        help_text="Причина отклонения (заполняется администратором)",
+        blank=True,          # Можно пустое при создании
+        verbose_name="Причина отклонения",
+        help_text="Заполняется администратором при отклонении",
     )
 
     # Даты

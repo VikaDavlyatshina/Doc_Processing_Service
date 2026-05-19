@@ -265,7 +265,7 @@ SITE_URL = os.getenv("SITE_URL")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
 # Где хранить расписание (в базе данных)
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # ============================================
 # РАСПИСАНИЕ ПЕРИОДИЧЕСКИХ ЗАДАЧ (CELERY BEAT)
@@ -273,6 +273,6 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SCHEDULE = {
     "check-overdue-documents-every-2-hours": {
         "task": "documents.tasks.check_overdue_documents",
-        "schedule": crontab(minute="0", hour="*/2"),    # Каждые 2 часа
+        "schedule": crontab(minute="0", hour="*/2"),  # Каждые 2 часа
     },
 }

@@ -1,6 +1,9 @@
 from django.core.exceptions import ValidationError
-from .tasks import notify_admin_new_document, notify_user_document_approved,notify_user_document_rejected
+
 from documents.serializers import DocumentSerializer
+
+from .tasks import (notify_admin_new_document, notify_user_document_approved,
+                    notify_user_document_rejected)
 
 
 def create_document(user, serializer):

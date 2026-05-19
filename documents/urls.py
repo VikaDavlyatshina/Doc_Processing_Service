@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .apps import DocumentsConfig
-from .views import (DocumentModerationViewSet, DocumentOwnerViewsSet,
+from .views import (DocumentModerationViewSet, DocumentOwnerViewSet,
                     DocumentViewSet)
 
 app_name = DocumentsConfig.name
@@ -27,10 +27,10 @@ urlpatterns = [
     path("", include(router.urls)),
     # Обновление документа владельцем
     path(
-        "<int:pk>/update-file/", DocumentOwnerViewsSet.as_view({"post": "update_file"})
+        "<int:pk>/update-file/", DocumentOwnerViewSet.as_view({"post": "update_file"})
     ),
     # Отправка черновика документа на проверку модератору
-    path("<int:pk>/submit/", DocumentOwnerViewsSet.as_view({"post": "submit"})),
+    path("<int:pk>/submit/", DocumentOwnerViewSet.as_view({"post": "submit"})),
     # Подтверждение документа модератором
     path("<int:pk>/approve/", DocumentModerationViewSet.as_view({"post": "approve"})),
     # Отклонение документа модератором

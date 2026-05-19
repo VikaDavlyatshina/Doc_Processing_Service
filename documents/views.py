@@ -2,12 +2,14 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+
 from documents.models import Document
 from documents.permissions import IsOwnerOnly
 from documents.serializers import DocumentSerializer
-from documents.services import (approve_document, reject_document,
-                                replace_document_file, send_document_to_review,
-                                validate_document_status, create_document)
+from documents.services import (approve_document, create_document,
+                                reject_document, replace_document_file,
+                                send_document_to_review,
+                                validate_document_status)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -22,7 +24,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = DocumentSerializer
-
 
     def get_queryset(self):
         """Возвращает список документов с учётом прав пользователя."""
@@ -123,7 +124,7 @@ class DocumentModerationViewSet(viewsets.GenericViewSet):
     queryset = Document.objects.all()
 
     def initial(self, request, *args, **kwargs):
-        """ Проверяем, что польщователь входит в число Модераторов """
+        """Проверяем, что польщователь входит в число Модераторов"""
         super().initial(request, *args, **kwargs)
         if not request.user.groups.filter(name="Document Moderator").exists():
             raise PermissionDenied("Только для модераторов")

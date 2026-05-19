@@ -21,27 +21,27 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = [
-            "id",              # ID документа
-            "user",            # Кто загрузил (только чтение)
+            "id",  # ID документа
+            "user",  # Кто загрузил (только чтение)
             "user_email",
-            "file",            # Сам файл
-            "user_note",       # Примечание пользователя
-            "status",          # Статус (только чтение)
+            "file",  # Сам файл
+            "user_note",  # Примечание пользователя
+            "status",  # Статус (только чтение)
             "status_display",  # Человекочитаемый статус
-            "comment",         # Комментарий
-            "uploaded_at",     # Дата загрузки (только чтение)
+            "comment",  # Комментарий
+            "uploaded_at",  # Дата загрузки (только чтение)
             "updated_at",
-            "reviewed_by",     # Кто проверил (только чтение)
+            "reviewed_by",  # Кто проверил (только чтение)
             "reviewed_by_email",
-            "reviewed_at",     # Дата проверки (только чтение)
+            "reviewed_at",  # Дата проверки (только чтение)
         ]
         read_only_fields = [
-            "user",           # user нельзя редактировать через API
-            "status",         # статус меняется только через approve/reject
-            "uploaded_at",    # дата загрузки устанавливается автоматически
+            "user",  # user нельзя редактировать через API
+            "status",  # статус меняется только через approve/reject
+            "uploaded_at",  # дата загрузки устанавливается автоматически
             "updated_at",
-            "reviewed_by",    # заполняется при approve/reject
-            "reviewed_at",    # заполняется при approve/reject
+            "reviewed_by",  # заполняется при approve/reject
+            "reviewed_at",  # заполняется при approve/reject
         ]
         extra_kwargs = {
             "user_note": {
