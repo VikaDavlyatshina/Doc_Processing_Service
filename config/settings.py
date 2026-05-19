@@ -14,6 +14,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -32,9 +33,9 @@ if not os.path.exists("/.dockerenv"):
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -205,4 +206,73 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     # Тип токена в заголовке: Authorization: Bearer <токен>
     "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# Настройка отправки писем
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+SERVER_EMAIL = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+
+# ============================================
+# НАСТРОЙКИ ДОКУМЕНТАЦИИ API (Swagger/OpenAPI)
+# ============================================
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Docs Processing API",  # Название API
+    "DESCRIPTION": "API для сервиса управления загружаемыми документами.",  # Описание
+    "VERSION": "1.0.0",  # Версия API
+    "SERVE_INCLUDE_SCHEMA": False,  # Не показывать схему в ответах API
+    "TAGS": [
+        {"name": "documents", "description": "Управление документами"},
+        {"name": "users", "description": "Пользователи"},
+    ],
+}
+
+# ============================================
+# REDIS (брокер для Celery)
+# ============================================
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_DB = os.getenv("REDIS_DB")
+
+# ============================================
+# CELERY
+# ============================================
+# Куда класть задачи (брокер)
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Где хранить результаты выполнения (бэкенд)
+CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Часовой пояс для задач
+CELERY_TIMEZONE = TIME_ZONE
+
+# Логировать начало каждой задачи
+CELERY_TASK_TRACK_STARTED = True
+
+# Максимальное время выполнения задачи (30 минут)
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# URL сайта для формирования ссылок в письмах
+SITE_URL = os.getenv("SITE_URL")
+# Email администратора для получения уведомлений о новых документах
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+
+# Где хранить расписание (в базе данных)
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# ============================================
+# РАСПИСАНИЕ ПЕРИОДИЧЕСКИХ ЗАДАЧ (CELERY BEAT)
+# ============================================
+CELERY_BEAT_SCHEDULE = {
+    "check-overdue-documents-every-2-hours": {
+        "task": "documents.tasks.check_overdue_documents",
+        "schedule": crontab(minute="0", hour="*/2"),    # Каждые 2 часа
+    },
 }
