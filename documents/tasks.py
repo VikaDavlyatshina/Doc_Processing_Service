@@ -20,7 +20,7 @@ def notify_admin_new_document(document_id):
 Файл: {doc.file.name}
 Загружен: {doc.uploaded_at}
 
-Ссылка для просмотра: {settings.SITE_URL}/api/documents/{doc.id}/
+Ссылка для просмотра: {settings.SITE_URL}/admin/documents/document/{doc.id}/change/
         """
         send_mail(
             subject=subject,
@@ -105,7 +105,7 @@ def check_overdue_documents():
 
 Комментарий: {doc.user_note}
 Загружен: {doc.uploaded_at}
-Ссылка для просмотра: {settings.SITE_URL}/api/documents/{doc.id}/
+Ссылка для просмотра: {settings.SITE_URL}/admin/documents/document/{doc.id}/change/
         """
         send_mail(
             subject=subject,
