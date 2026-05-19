@@ -25,10 +25,12 @@ class DocumentSerializer(serializers.ModelSerializer):
             "user",            # Кто загрузил (только чтение)
             "user_email",
             "file",            # Сам файл
+            "user_note",       # Примечание пользователя
             "status",          # Статус (только чтение)
             "status_display",  # Человекочитаемый статус
             "comment",         # Комментарий
             "uploaded_at",     # Дата загрузки (только чтение)
+            "updated_at",
             "reviewed_by",     # Кто проверил (только чтение)
             "reviewed_by_email",
             "reviewed_at",     # Дата проверки (только чтение)
@@ -37,6 +39,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             "user",           # user нельзя редактировать через API
             "status",         # статус меняется только через approve/reject
             "uploaded_at",    # дата загрузки устанавливается автоматически
+            "updated_at",
             "reviewed_by",    # заполняется при approve/reject
             "reviewed_at",    # заполняется при approve/reject
         ]
@@ -44,8 +47,10 @@ class DocumentSerializer(serializers.ModelSerializer):
             "user_note": {
                 "required": True,
                 "allow_blank": False,
-                "help_text": "Короткий комментарий к документу (обязательно)",
-            }
+            },
+            "comment": {
+                "required": False,  # Не обязательно при создании
+            },
         }
 
     def get_reviewed_by_email(self, obj):
@@ -61,9 +66,10 @@ class DocumentSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def validate_comment(self, value):
-        """Проверяет длину комментария (если он есть)."""
-        if value and len(value) > 500:
-            raise serializers.ValidationError(
-                "Комментарий не может быть длиннее 500 символов"
-            )
-        return value
+        if value is None or value == "":
+            return value
+        if not value.strip():
+            raise serializers.ValidationError("Укажите причину отклонения")
+        if len(value) > 500:
+            raise serializers.ValidationError("Не более 500 символов")
+        return value.strip()
