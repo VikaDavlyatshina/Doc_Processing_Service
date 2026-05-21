@@ -6,3 +6,10 @@ class IsOwnerOnly(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return obj.user == request.user
+
+
+class IsModerator(permissions.BasePermission):
+    """Проверяет, что пользователь состоит в группе модераторов документов"""
+
+    def has_permission(self, request, view):
+        return request.user.groups.filter(name="Document Moderator").exists()
