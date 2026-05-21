@@ -64,12 +64,3 @@ class DocumentSerializer(serializers.ModelSerializer):
                 "Укажите короткий комментарий к документу"
             )
         return value.strip()
-
-    def validate_comment(self, value):
-        if value is None or value == "":
-            return value
-        if not value.strip():
-            raise serializers.ValidationError("Укажите причину отклонения")
-        if len(value) > 500:
-            raise serializers.ValidationError("Не более 500 символов")
-        return value.strip()

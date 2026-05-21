@@ -61,3 +61,14 @@ def check_document_file(file):
 
     # Если все проверки пройдены — возвращаем файл
     return file
+
+def validate_comment_length(comment, max_length=500):
+    """
+    Проверяет, что комментарий не превышает максимальную длину.
+    Возвращает очищенный комментарий или выбрасывает ValidationError.
+    """
+    if not comment or not comment.strip():
+        raise ValidationError("Укажите причину отклонения")
+    if len(comment) > max_length:
+        raise ValidationError(f"Комментарий не может быть длиннее {max_length} символов")
+    return comment.strip()
