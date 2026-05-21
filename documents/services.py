@@ -1,37 +1,7 @@
-from django.core.exceptions import ValidationError
-
 from documents.serializers import DocumentSerializer
 
 from .tasks import (notify_admin_new_document, notify_user_document_approved,
                     notify_user_document_rejected)
-
-
-def create_document(user, serializer):
-    """Создаёт документ и логирует создание"""
-    document = serializer.save(user=user)
-    document.log_action(user=user, action="created", new_status="draft")
-    return document
-
-
-# ============================================================
-# 1. Проверка статуса документа
-# ============================================================
-
-
-def validate_document_status(document, expected_status):
-    """
-    Проверяет, что документ находится в ожидаемом статусе.
-    Если нет — выбрасывает ValidationError.
-    """
-    if document.status != expected_status:
-        raise ValidationError(
-            f"Документ уже в статусе: {document.get_status_display()}"
-        )
-
-
-# ============================================================
-# 2. Замена файла владельцем
-# ============================================================
 
 
 def replace_document_file(document, new_file, user):
@@ -59,17 +29,12 @@ def replace_document_file(document, new_file, user):
         user=user, action="file_updated", old_status=old_status, new_status="pending"
     )
 
-    # Отправляем сообщении админу о новом документе
+    # Отправляем сообщение админу о новом документе
     notify_admin_new_document.delay(document.id)
 
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
     return serializer.data
-
-
-# ============================================================
-# 3. Отправка на проверку (владелец)
-# ============================================================
 
 
 def send_document_to_review(document, user):
@@ -97,11 +62,6 @@ def send_document_to_review(document, user):
     return serializer.data
 
 
-# ============================================================
-# 4. Подтверждение документа (модератор)
-# ============================================================
-
-
 def approve_document(document, moderator):
     """
     Подтверждает документ. Статус становится 'approved'.
@@ -116,11 +76,6 @@ def approve_document(document, moderator):
     # Возвращаем полные данные документа
     serializer = DocumentSerializer(document)
     return serializer.data
-
-
-# ============================================================
-# 5. Отклонение документа (модератор)
-# ============================================================
 
 
 def reject_document(document, moderator, comment):
