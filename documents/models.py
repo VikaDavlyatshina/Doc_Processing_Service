@@ -103,7 +103,7 @@ class Document(models.Model):
 
     # Комментарий администратора (только при отклонении)
     comment = models.TextField(
-        blank=True,          # Можно пустое при создании
+        blank=True,  # Можно пустое при создании
         verbose_name="Причина отклонения",
         help_text="Заполняется администратором при отклонении",
     )

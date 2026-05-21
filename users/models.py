@@ -1,6 +1,6 @@
-from django.db import models
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
+from django.db import models
 from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 
@@ -34,9 +34,11 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email)
 
         # Значения по умолчанию для обычного пользователя
-        extra_fields.setdefault("is_active", True)     # Пользователь активен сразу после регистрации
-        extra_fields.setdefault("is_staff", False)     # Нет доступа в админку
-        extra_fields.setdefault("is_superuser", False) # Не суперпользователь
+        extra_fields.setdefault(
+            "is_active", True
+        )  # Пользователь активен сразу после регистрации
+        extra_fields.setdefault("is_staff", False)  # Нет доступа в админку
+        extra_fields.setdefault("is_superuser", False)  # Не суперпользователь
 
         # Хэшируем пароль и сохраняем
         user = self.model(email=email, **extra_fields)
@@ -74,9 +76,7 @@ class User(AbstractUser):
 
     # Email
     email = models.EmailField(
-        unique=True,
-        verbose_name="Email",
-        help_text="Используется для входа в систему"
+        unique=True, verbose_name="Email", help_text="Используется для входа в систему"
     )
 
     # Телефон (необязательный)
@@ -84,33 +84,22 @@ class User(AbstractUser):
         blank=True,
         null=True,
         verbose_name="Телефон",
-        help_text="Введите номер телефона"
+        help_text="Введите номер телефона",
     )
 
     # Личные данные
-    first_name = models.CharField(
-        max_length=50,
-        verbose_name="Имя"
-    )
-    last_name = models.CharField(
-        max_length=50,
-        verbose_name="Фамилия"
-    )
+    first_name = models.CharField(max_length=50, verbose_name="Имя")
+    last_name = models.CharField(max_length=50, verbose_name="Фамилия")
 
     # Аватар профиля (загружается пользователем, необязательный)
     avatar = models.ImageField(
-        upload_to="users/avatars",
-        blank=True,
-        null=True,
-        verbose_name="Фото профиля"
+        upload_to="users/avatars", blank=True, null=True, verbose_name="Фото профиля"
     )
     # Поле для мягкого удаления:
     # - NULL = пользователь активен
     # - дата = пользователь удалён (запись остаётся в БД, но вход заблокирован)
     deleted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name="Дата удаления"
+        null=True, blank=True, verbose_name="Дата удаления"
     )
 
     # ==================================================================
@@ -144,8 +133,8 @@ class User(AbstractUser):
         - Деактивирует учётную запись (блокирует вход)
         Сама запись остаётся в базе данных.
         """
-        self.deleted_at = timezone.now()   # Запоминаем момент удаления
-        self.is_active = False              # Блокируем возможность входа
+        self.deleted_at = timezone.now()  # Запоминаем момент удаления
+        self.is_active = False  # Блокируем возможность входа
         self.save()
 
     def restore(self):
@@ -154,8 +143,8 @@ class User(AbstractUser):
         - Очищает дату удаления
         - Активирует учётную запись (разрешает вход)
         """
-        self.deleted_at = None              # Очищаем метку удаления
-        self.is_active = True               # Разблокируем вход
+        self.deleted_at = None  # Очищаем метку удаления
+        self.is_active = True  # Разблокируем вход
         self.save()
 
     @property

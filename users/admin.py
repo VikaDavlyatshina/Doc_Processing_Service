@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.utils.safestring import mark_safe
+
 from users.models import User
 
 
@@ -9,13 +10,13 @@ class UserAdmin(admin.ModelAdmin):
 
     # Колонки в списке пользователей
     list_display = [
-        "id",               # ID пользователя
-        "email",            # Email (логин)
-        "first_name",       # Имя
-        "last_name",        # Фамилия
-        "status_badge",     # Статус (активен/удалён/неактивен)
-        "deleted_at",       # Дата мягкого удаления
-        "is_staff",         # Доступ в админку
+        "id",  # ID пользователя
+        "email",  # Email (логин)
+        "first_name",  # Имя
+        "last_name",  # Фамилия
+        "status_badge",  # Статус (активен/удалён/неактивен)
+        "deleted_at",  # Дата мягкого удаления
+        "is_staff",  # Доступ в админку
     ]
 
     # Фильтры в правой боковой панели
@@ -33,17 +34,18 @@ class UserAdmin(admin.ModelAdmin):
 
     # Группировка полей на странице редактирования
     fieldsets = (
-        ("Основная информация", {
-            "fields": ("email", "first_name", "last_name", "phone", "avatar")
-        }),
-        ("Права доступа", {
-            "fields": ("is_staff", "is_superuser", "groups", "user_permissions"),
-            "classes": ("collapse",)  # Свёрнутая секция
-        }),
-        ("Мягкое удаление", {
-            "fields": ("deleted_at",),
-            "classes": ("collapse",)
-        }),
+        (
+            "Основная информация",
+            {"fields": ("email", "first_name", "last_name", "phone", "avatar")},
+        ),
+        (
+            "Права доступа",
+            {
+                "fields": ("is_staff", "is_superuser", "groups", "user_permissions"),
+                "classes": ("collapse",),  # Свёрнутая секция
+            },
+        ),
+        ("Мягкое удаление", {"fields": ("deleted_at",), "classes": ("collapse",)}),
     )
 
     # Цветной индикатор статуса пользователя
@@ -59,6 +61,7 @@ class UserAdmin(admin.ModelAdmin):
             return mark_safe('<span style="color: #e67e22;">⚠ Неактивен</span>')
         # Активен: зелёная точка
         return mark_safe('<span style="color: #27ae60;">● Активен</span>')
+
     status_badge.short_description = "Статус"
 
     # Массовое действие: восстановление удалённых пользователей
@@ -66,6 +69,9 @@ class UserAdmin(admin.ModelAdmin):
 
     def restore_selected(self, request, queryset):
         """Восстанавливает выбранных пользователей (очищает deleted_at и делает is_active=True)"""
-        updated = queryset.filter(deleted_at__isnull=False).update(deleted_at=None, is_active=True)
+        updated = queryset.filter(deleted_at__isnull=False).update(
+            deleted_at=None, is_active=True
+        )
         self.message_user(request, f"Восстановлено {updated} пользователей.")
+
     restore_selected.short_description = "Восстановить выбранных"

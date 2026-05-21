@@ -1,25 +1,28 @@
 import os
+
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.utils.safestring import mark_safe
+
 from .models import Document, DocumentLog
 
 
 class UserStatusFilter(SimpleListFilter):
     """Фильтр: показывать документы активных или удалённых пользователей"""
-    title = 'Статус пользователя'
-    parameter_name = 'user_status'
+
+    title = "Статус пользователя"
+    parameter_name = "user_status"
 
     def lookups(self, request, model_admin):
         return (
-            ('active', 'Активные пользователи'),
-            ('deleted', 'Удалённые пользователи'),
+            ("active", "Активные пользователи"),
+            ("deleted", "Удалённые пользователи"),
         )
 
     def queryset(self, request, queryset):
-        if self.value() == 'active':
+        if self.value() == "active":
             return queryset.filter(user__deleted_at__isnull=True)
-        if self.value() == 'deleted':
+        if self.value() == "deleted":
             return queryset.filter(user__deleted_at__isnull=False)
         return queryset
 
@@ -61,34 +64,36 @@ class DocumentAdmin(admin.ModelAdmin):
             # Новый документ
             obj.log_action(
                 user=request.user,
-                action='created',
+                action="created",
                 old_status=None,
-                new_status=obj.status
+                new_status=obj.status,
             )
             self.message_user(request, f"Документ #{obj.id} создан", messages.SUCCESS)
 
-        elif change and 'status' in form.changed_data:
+        elif change and "status" in form.changed_data:
             # Изменился статус
-            old_status = form.initial.get('status')
+            old_status = form.initial.get("status")
             new_status = obj.status
 
             # Определяем тип действия
-            if new_status == 'approved':
-                action = 'approved'
-            elif new_status == 'rejected':
-                action = 'rejected'
-            elif old_status == 'draft' and new_status == 'pending':
-                action = 'submitted'
+            if new_status == "approved":
+                action = "approved"
+            elif new_status == "rejected":
+                action = "rejected"
+            elif old_status == "draft" and new_status == "pending":
+                action = "submitted"
             else:
-                action = 'status_changed'
+                action = "status_changed"
 
             obj.log_action(
                 user=request.user,
                 action=action,
                 old_status=old_status,
-                new_status=new_status
+                new_status=new_status,
             )
-            self.message_user(request, f"Статус документа #{obj.id} изменён", messages.SUCCESS)
+            self.message_user(
+                request, f"Статус документа #{obj.id} изменён", messages.SUCCESS
+            )
 
     def file_link(self, obj):
         if obj.file:

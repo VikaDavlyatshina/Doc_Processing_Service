@@ -1,8 +1,9 @@
-from celery import shared_task
-from django.core.mail import send_mail
-from django.conf import settings
-from django.utils import timezone
 from datetime import timedelta
+
+from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
+from django.utils import timezone
 
 from documents.models import Document
 
@@ -64,6 +65,7 @@ def notify_user_document_approved(document_id):
     except Document.DoesNotExist:
         pass
 
+
 @shared_task
 def notify_user_document_rejected(document_id):
     """Отправляет пользователю уведомление об отклонении документа"""
@@ -96,7 +98,7 @@ def notify_user_document_rejected(document_id):
 def check_overdue_documents():
     """Проверяет документы, ожидающие проверки больше 2 часов"""
     threshold = timezone.now() - timedelta(hours=2)
-    overdue_docs = Document.objects.filter(status='pending', uploaded_at__lt=threshold)
+    overdue_docs = Document.objects.filter(status="pending", uploaded_at__lt=threshold)
 
     for doc in overdue_docs:
         subject = f"ВНИМАНИЕ: Документ #{doc.id} ожидает проверки более 2 часов"
