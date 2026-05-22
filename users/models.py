@@ -17,11 +17,13 @@ class UserManager(BaseUserManager):
         По умолчанию возвращаем только активных пользователей (не удалённых).
         Удалённые пользователи исключаются автоматически.
         """
+        # deleted_at__isnull=True = дата удаления не заполнена → пользователь активен
         return super().get_queryset().filter(deleted_at__isnull=True)
 
     def active(self):
         """
         Возвращает только активных (не удалённых) пользователей.
+        Явный метод для читаемости кода.
         """
         return self.get_queryset()
 
@@ -34,10 +36,8 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email)
 
         # Значения по умолчанию для обычного пользователя
-        extra_fields.setdefault(
-            "is_active", True
-        )  # Пользователь активен сразу после регистрации
-        extra_fields.setdefault("is_staff", False)  # Нет доступа в админку
+        extra_fields.setdefault("is_active", True)   # Пользователь активен сразу после регистрации
+        extra_fields.setdefault("is_staff", False)   # Нет доступа в админку
         extra_fields.setdefault("is_superuser", False)  # Не суперпользователь
 
         # Хэшируем пароль и сохраняем
@@ -51,9 +51,9 @@ class UserManager(BaseUserManager):
         Создаёт суперпользователя.
         """
         # Устанавливаем права
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
-        extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault("is_staff", True)      # Доступ в админку
+        extra_fields.setdefault("is_superuser", True)  # Все права
+        extra_fields.setdefault("is_active", True)     # Активен сразу
 
         # Валидация прав
         if not extra_fields.get("is_staff"):
@@ -71,13 +71,21 @@ class User(AbstractUser):
     Поддерживает мягкое удаление (сохранение данных в БД с блокировкой входа).
     """
 
+    # ==================================================================
+    # 1. ОСНОВНЫЕ ПОЛЯ (аутентификация)
+    # ==================================================================
+
     # Отключаем стандартное поле username (оно не используется)
     username = None
 
-    # Email
+    # Email — основной идентификатор для входа
     email = models.EmailField(
         unique=True, verbose_name="Email", help_text="Используется для входа в систему"
     )
+
+    # ==================================================================
+    # 2. КОНТАКТНЫЕ ДАННЫЕ
+    # ==================================================================
 
     # Телефон (необязательный)
     phone = PhoneNumberField(
@@ -95,23 +103,49 @@ class User(AbstractUser):
     avatar = models.ImageField(
         upload_to="users/avatars", blank=True, null=True, verbose_name="Фото профиля"
     )
-    # Поле для мягкого удаления:
-    # - NULL = пользователь активен
-    # - дата = пользователь удалён (запись остаётся в БД, но вход заблокирован)
+
+    # ==================================================================
+    # 3. ПОЛЯ ДЛЯ МЯГКОГО УДАЛЕНИЯ (сохраняем историю, но блокируем вход)
+    # ==================================================================
+
+    # deleted_at = дата удаления (NULL = пользователь активен)
     deleted_at = models.DateTimeField(
         null=True, blank=True, verbose_name="Дата удаления"
     )
+    # deleted_by = кто выполнил удаление (ссылка на пользователя)
+    deleted_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_users',
+        verbose_name="Кто удалил"
+    )
+
+    # restored_at = дата восстановления (для аудита)
+    restored_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Дата восстановления"
+    )
+    # restored_by = кто выполнил восстановление (ссылка на пользователя)
+    restored_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='restored_users',
+        verbose_name="Кто восстановил"
+    )
 
     # ==================================================================
-    # НАСТРОЙКИ АУТЕНТИФИКАЦИИ
+    # 4. НАСТРОЙКИ АУТЕНТИФИКАЦИИ DJANGO
     # ==================================================================
 
-    # Для входа используется email
+    # Для входа используется email (вместо username)
     USERNAME_FIELD = "email"
     # Поля, которые запрашиваются при создании суперпользователя
     REQUIRED_FIELDS = ["first_name", "last_name"]
 
-    # Подключаем кастомный менеджер
+    # Подключаем кастомный менеджер (автоматически фильтрует удалённых)
     objects = UserManager()
 
     class Meta:
@@ -123,28 +157,36 @@ class User(AbstractUser):
         return self.email
 
     # ==================================================================
-    # МЕТОДЫ МЯГКОГО УДАЛЕНИЯ
+    # 5. МЕТОДЫ МЯГКОГО УДАЛЕНИЯ И ВОССТАНОВЛЕНИЯ
     # ==================================================================
 
-    def soft_delete(self):
+    def soft_delete(self, performed_by=None):
         """
         Мягкое удаление пользователя.
-        - Заполняет дату удаления
-        - Деактивирует учётную запись (блокирует вход)
-        Сама запись остаётся в базе данных.
+        1. Заполняем дату удаления (deleted_at)
+        2. Запоминаем, кто удалил (deleted_by)
+        3. Блокируем вход (is_active = False)
+        Сама запись остаётся в БД — можно восстановить.
         """
-        self.deleted_at = timezone.now()  # Запоминаем момент удаления
-        self.is_active = False  # Блокируем возможность входа
+        self.deleted_at = timezone.now()      # Момент удаления
+        self.deleted_by = performed_by        # Кто удалил (админ или сам пользователь)
+        self.is_active = False                # Блокируем вход в систему
         self.save()
 
-    def restore(self):
+    def restore(self, performed_by=None):
         """
         Восстановление мягко удалённого пользователя.
-        - Очищает дату удаления
-        - Активирует учётную запись (разрешает вход)
+        1. Очищаем дату удаления (deleted_at)
+        2. Очищаем "кто удалил" (deleted_by)
+        3. Заполняем дату восстановления (restored_at)
+        4. Запоминаем, кто восстановил (restored_by
+        5. Разблокируем вход (is_active = True)
         """
-        self.deleted_at = None  # Очищаем метку удаления
-        self.is_active = True  # Разблокируем вход
+        self.deleted_at = None                # Очищаем метку удаления
+        self.deleted_by = None                # Очищаем, кто удалил
+        self.restored_at = timezone.now()     # Запоминаем момент восстановления
+        self.restored_by = performed_by       # Запоминаем, кто восстановил
+        self.is_active = True                 # Разблокируем вход
         self.save()
 
     @property
@@ -152,29 +194,22 @@ class User(AbstractUser):
         """
         Проверяет, удалён ли пользователь.
         Возвращает True, если deleted_at заполнен (не NULL).
+        Удобно для проверок: if user.is_deleted: ...
         """
         return self.deleted_at is not None
 
     # ==================================================================
-    # МЕТОДЫ ДЛЯ ОТОБРАЖЕНИЯ ИМЕНИ
+    # 6. МЕТОДЫ ДЛЯ ОТОБРАЖЕНИЯ ИМЕНИ
     # ==================================================================
 
     def get_full_name(self):
         """
         Возвращает полное имя пользователя (Имя + Фамилия).
         Если имя не заполнено, возвращает часть email до @.
+        Используется в письмах и интерфейсе.
         """
         if self.first_name and self.last_name:
             return f"{self.first_name} {self.last_name}"
-        if self.first_name:
-            return self.first_name
-        return self.email.split("@")[0]
-
-    def get_short_name(self):
-        """
-        Возвращает короткое имя (только имя).
-        Если имя не заполнено, возвращает часть email до @.
-        """
         if self.first_name:
             return self.first_name
         return self.email.split("@")[0]
