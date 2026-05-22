@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from documents.models import Document
-from documents.permissions import IsModerator, IsOwnerOnly
+from users.permissions import IsModerator, IsOwnerOnly
 from documents.serializers import DocumentSerializer
 from documents.services import (approve_document, reject_document,
                                 replace_document_file, send_document_to_review)
