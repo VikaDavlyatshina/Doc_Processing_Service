@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from users.models import User
+from users.permissions import IsUserManager
 from users.serializers import UserCreateSerializer, UserSerializer
 
 
@@ -65,10 +66,10 @@ class UserSoftDeleteView(APIView):
 class UserRestoreView(APIView):
     """
     Восстановление аккаунта пользователя.
-    Доступно только Администраторам.
+    Доступно для менеджеров пользователей.
     """
-    # Только администраторы могут восстанавливать пользователей
-    permission_classes = [permissions.IsAdminUser]
+    # Только администраторы пользователей могут восстанавливать пользователей
+    permission_classes = [permissions.IsAuthenticated, IsUserManager]
 
     def post(self, request, user_id):
         # Ищем удалённого пользователя через _base_manager,
