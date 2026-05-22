@@ -79,6 +79,25 @@ class DocumentViewSet(viewsets.ModelViewSet):
         # Записываем в историю: кто, когда и какое действие выполнил
         document.log_action(user=user, action="created", new_status="draft")
 
+    def perform_destroy(self, instance):
+        """Удаление документа с логированием"""
+        user = self.request.user
+
+        # Логируем удаление
+        instance.log_action(
+            user=user,
+            action='deleted',
+            old_status=instance.status,
+            new_status=None
+        )
+
+        # Удаляем файл с диска
+        if instance.file:
+            instance.file.delete(save=False)
+
+        # Удаляем запись из БД
+        instance.delete()
+
 
 class DocumentOwnerViewSet(viewsets.GenericViewSet):
     """

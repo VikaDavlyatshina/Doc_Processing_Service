@@ -18,6 +18,7 @@ class DocumentLog(models.Model):
         ("approved", "Подтверждён"),
         ("rejected", "Отклонён"),
         ("file_updated", "Файл заменён"),
+        ("deleted", "Удалён"),
     ]
 
     # К какому документу относится лог
