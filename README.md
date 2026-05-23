@@ -124,7 +124,7 @@ cp .env.template .env
 ```bash
 docker compose up -d --build
 ```
-4. Откройте сайт: http://localhost:8080
+4. Откройте сайт: http://localhost:8000
 
 ## Тестовые данные
 
