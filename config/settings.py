@@ -330,6 +330,17 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # ============================================
+# CSRF (Cross-Site Request Forgery Protection)
+# ============================================
+# Читаем список доверенных адресов для защиты форм из .env
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:8080,http://127.0.0.1:8080"
+    ).split(",")
+]
+
+# ============================================
 # CORS (Cross-Origin Resource Sharing)
 # ============================================
 # Разрешаем фронтенду передавать заголовки авторизации (JWT-токены Bearer)
@@ -339,7 +350,6 @@ CORS_ALLOW_CREDENTIALS = True
 
 # В файл .env пишем адреса ФРОНТЕНДА ( Vue, React, Next.js, Nuxt или LMS-систем ).
 # Записываем через запятую, без пробелов, обязательно с http:// или https:// и портами.
-#
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
