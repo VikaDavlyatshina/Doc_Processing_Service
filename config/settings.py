@@ -33,9 +33,20 @@ if not os.path.exists("/.dockerenv"):
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG")
 
-ALLOWED_HOSTS = ["*"]
+# Извлекаем значение из .env, переводим в нижний регистр (.lower())
+# и сравниваем со строкой "true", чтобы не зависеть от регистра букв.
+# Если в .env написано DEBUG=True (или true), то ( "true" == "true" ) вернет чистый True.
+# Если там написано DEBUG=False (или false), то ( "false" == "true" ) вернет чистый False.
+DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+
+# Читаем строку из .env
+# Если в .env ничего нет, по умолчанию подставится безопасный ["localhost", "127.0.0.1"]
+# .strip() очистит адреса от пробелов
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+]
 
 
 # Application definition
@@ -61,6 +72,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -126,45 +138,56 @@ AUTH_PASSWORD_VALIDATORS = [
         # Запрещает пароли, состоящие только из цифр (12345678)
     },
 ]
+# ============================================
+# ИНТЕРНАЦИОНАЛИЗАЦИЯ И ВРЕМЯ
+# ============================================
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-# Язык интерфейса (кнопки, надписи в админке)
-LANGUAGE_CODE = "en-us"
+# Язык интерфейса по умолчанию (например, (кнопки, надписи в админке)
+LANGUAGE_CODE = os.getenv("LANGUAGE_CODE")
 
-# Часовой пояс
-TIME_ZONE = "UTC"
+# Основной часовой пояс проекта
+TIME_ZONE = os.getenv("TIME_ZONE")
 
 # Интернационализация (переводы на другие языки)
 USE_I18N = True
 
-# Использовать часовые пояса (хранить время в UTC, показывать в локальном)
+# Хранить время в БД в UTC, но в коде и админке показывать в локальном TIME_ZONE
 USE_TZ = True
 
-# ТИП ПОЛЯ ПО УМОЛЧАНИЮ ДЛЯ ПЕРВИЧНЫХ КЛЮЧЕЙ
+# Тип поля по умолчанию для первичных ключей (ID моделей)
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ============================================
-# СТАТИКА И МЕДИА
+# ГЛОБАЛЬНЫЕ АДРЕСА ПРОЕКТА (SITE & EMAIL)
 # ============================================
+# Базовый URL сайта для формирования ссылок в письмах и медиа-файлах
+SITE_URL = os.getenv("SITE_URL")
 
-# URL для доступа к статике (CSS, JS админки)
-STATIC_URL = "static/"
+# Email администратора для получения уведомлений о новых документах от Celery
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
-# URL для доступа к загруженным пользователями файлам
-MEDIA_URL = "media/"
 
-# === ПАПКИ ДЛЯ ХРАНЕНИЯ ФАЙЛОВ ===
+# ============================================
+# СТАТИКА И МЕДИА (Для совместной работы с Nginx)
+# ============================================
+# URL-префиксы для доступа к файлам через браузер
+STATIC_URL = "/static/"
 
-# Папка, куда собираются все статические файлы из всех приложений
-# Для продакшена: после деплоя нужно выполнить python manage.py collectstatic
+# Django строит абсолютные ссылки http://localhost:8080/media/...
+MEDIA_URL = f"{SITE_URL}/media/"
+
+# --- ФИЗИЧЕСКИЕ ПАПКИ НА ДИСКЕ ---
+
+# Куда Django соберет всю статику проекта для Nginx при выполнении collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Папка, куда сохраняются загруженные пользователями файлы (документы, аватары)
+# Куда физически загружаются файлы пользователей (документы, аватары)
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-# Дополнительные папки со статикой (только в разработке)
+# Дополнительные папки со статикой (используются только во время разработки)
 if DEBUG:
     STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
@@ -208,10 +231,12 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# Настройка отправки писем
+# ============================================
+# НАСТРОЙКИ ДЛЯ ОТПРАВКИ ПИСЕМ
+# ============================================
 EMAIL_HOST = os.getenv("EMAIL_HOST")
-EMAIL_PORT = os.getenv("EMAIL_PORT")
-EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "True").lower() == "true"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
@@ -229,17 +254,42 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",  # Версия API
     "SERVE_INCLUDE_SCHEMA": False,  # Не показывать схему в ответах API
     "TAGS": [
-        {"name": "documents", "description": "Управление документами"},
-        {"name": "users", "description": "Пользователи"},
+        # --- Приложение ДОКУМЕНТЫ ---
+        {
+            "name": "documents",
+            "description": "📄 Документы: Базовые операции (Просмотр и создание)",
+        },
+        {
+            "name": "documents-owner",
+            "description": "👤 Документы: Кабинет владельца (Отправка на проверку, замена файла)",
+        },
+        {
+            "name": "documents-moderation",
+            "description": "⚖️ Документы: Панель модератора (Утверждение и отклонение)",
+        },
+        # --- Приложение ПОЛЬЗОВАТЕЛИ ---
+        {
+            "name": "users",
+            "description": "🔐 Пользователи: Регистрация и авторизация (JWT)",
+        },
+        {
+            "name": "users-profile",
+            "description": "👤 Пользователи: Личный кабинет (Профиль и удаление)",
+        },
+        {
+            "name": "users-admin",
+            "description": "🛠️ Пользователи: Панель администратора (Восстановление аккаунтов)",
+        },
     ],
 }
 
 # ============================================
 # REDIS (брокер для Celery)
 # ============================================
-REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = os.getenv("REDIS_PORT")
-REDIS_DB = os.getenv("REDIS_DB")
+# Добавляем безопасные дефолты на случай, если .env не прочитался
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+REDIS_DB = os.getenv("REDIS_DB", "0")
 
 # ============================================
 # CELERY
@@ -250,7 +300,7 @@ CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 # Где хранить результаты выполнения (бэкенд)
 CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
 
-# Часовой пояс для задач
+# Часовой пояс для задач (использует TIME_ZONE из .env, который мы настроили ранее)
 CELERY_TIMEZONE = TIME_ZONE
 
 # Логировать начало каждой задачи
@@ -259,20 +309,42 @@ CELERY_TASK_TRACK_STARTED = True
 # Максимальное время выполнения задачи (30 минут)
 CELERY_TASK_TIME_LIMIT = 30 * 60
 
-# URL сайта для формирования ссылок в письмах
-SITE_URL = os.getenv("SITE_URL")
-# Email администратора для получения уведомлений о новых документах
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
-
-# Где хранить расписание (в базе данных)
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Оптимизация для Windows (чтобы задачи не теряли сериализацию)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
 
 # ============================================
 # РАСПИСАНИЕ ПЕРИОДИЧЕСКИХ ЗАДАЧ (CELERY BEAT)
 # ============================================
+
+# Где хранить расписание (Включаем совмещенный с админкой  режим)
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# Стартовое расписание, которое автоматически скопируется в базу данных
 CELERY_BEAT_SCHEDULE = {
     "check-overdue-documents-every-2-hours": {
         "task": "documents.tasks.check_overdue_documents",
-        "schedule": crontab(minute="0", hour="*/2"),  # Каждые 2 часа
+        "schedule": crontab(minute="0", hour="*/2"),
     },
 }
+
+# ============================================
+# CORS (Cross-Origin Resource Sharing)
+# ============================================
+# Разрешаем фронтенду передавать заголовки авторизации (JWT-токены Bearer)
+CORS_ALLOW_CREDENTIALS = True
+
+# Читаем список сайтов фронтенда из .env и превращаем в Python-список (list).
+
+# В файл .env пишем адреса ФРОНТЕНДА ( Vue, React, Next.js, Nuxt или LMS-систем ).
+# Записываем через запятую, без пробелов, обязательно с http:// или https:// и портами.
+#
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:8080",
+    ).split(",")
+]
