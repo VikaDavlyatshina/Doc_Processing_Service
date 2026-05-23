@@ -2,11 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .apps import DocumentsConfig
-from .views import (
-    DocumentViewSet,
-    DocumentOwnerViewSet,
-    DocumentModerationViewSet,
-)
+from .views import (DocumentModerationViewSet, DocumentOwnerViewSet,
+                    DocumentViewSet)
 
 app_name = DocumentsConfig.name
 
@@ -37,7 +34,6 @@ urlpatterns = [
         DocumentOwnerViewSet.as_view({"post": "submit"}),
         name="document-submit",
     ),
-
     # ========================================================================
     # ДЕЙСТВИЯ МОДЕРАТОРА (только для пользователей с правами модератора)
     # ========================================================================

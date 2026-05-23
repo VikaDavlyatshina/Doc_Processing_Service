@@ -1,6 +1,7 @@
-from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
+from django.core.management.base import BaseCommand
+
 from users.models import User
 
 
@@ -12,14 +13,16 @@ class Command(BaseCommand):
         permissions = Permission.objects.filter(
             content_type=user_ct,
             codename__in=[
-                "view_user",      # просмотр
-                "change_user",    # изменение (для восстановления)
+                "view_user",  # просмотр
+                "change_user",  # изменение (для восстановления)
             ],
         )
 
         group, created = Group.objects.get_or_create(name="User Manager")
         group.permissions.set(permissions)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Группа 'User Manager' {'создана' if created else 'обновлена'}"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Группа 'User Manager' {'создана' if created else 'обновлена'}"
+            )
+        )

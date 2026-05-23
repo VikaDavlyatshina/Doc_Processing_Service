@@ -48,10 +48,13 @@ class UserAdmin(admin.ModelAdmin):
                 "classes": ("collapse",),  # Свёрнутая секция
             },
         ),
-        ("Мягкое удаление", {
-            "fields": ("deleted_at", "deleted_by", "restored_at", "restored_by"),
-            "classes": ("collapse",),
-        }),
+        (
+            "Мягкое удаление",
+            {
+                "fields": ("deleted_at", "deleted_by", "restored_at", "restored_by"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
     # Цветной индикатор статуса пользователя
@@ -91,12 +94,17 @@ class UserAdmin(admin.ModelAdmin):
         if restored:
             messages_list.append(f"✅ Восстановлено: {restored}")
         if skipped_active:
-            messages_list.append(f"⚠️ Активные пользователи пропущены: {skipped_active}")
+            messages_list.append(
+                f"⚠️ Активные пользователи пропущены: {skipped_active}"
+            )
 
         if messages_list:
             self.message_user(request, " | ".join(messages_list), messages.SUCCESS)
         else:
-            self.message_user(request, "Нет пользователей для восстановления", messages.WARNING)
+            self.message_user(
+                request, "Нет пользователей для восстановления", messages.WARNING
+            )
+
     def deactivate_selected(self, request, queryset):
         """Массовая деактивация выбранных пользователей"""
         deactivated = 0
@@ -129,7 +137,9 @@ class UserAdmin(admin.ModelAdmin):
         if deactivated:
             messages_list.append(f"✅ Деактивировано: {deactivated}")
         if skipped_already_deactivated:
-            messages_list.append(f"⚠️ Уже деактивированы: {skipped_already_deactivated}")
+            messages_list.append(
+                f"⚠️ Уже деактивированы: {skipped_already_deactivated}"
+            )
         if skipped_superuser:
             messages_list.append(f"⚠️ Суперпользователи пропущены: {skipped_superuser}")
         if skipped_self:
@@ -138,4 +148,6 @@ class UserAdmin(admin.ModelAdmin):
         if messages_list:
             self.message_user(request, " | ".join(messages_list), messages.SUCCESS)
         else:
-            self.message_user(request, "Нет пользователей для деактивации", messages.WARNING)
+            self.message_user(
+                request, "Нет пользователей для деактивации", messages.WARNING
+            )

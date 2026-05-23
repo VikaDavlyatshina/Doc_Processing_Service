@@ -36,8 +36,10 @@ class UserManager(BaseUserManager):
         email = self.normalize_email(email)
 
         # Значения по умолчанию для обычного пользователя
-        extra_fields.setdefault("is_active", True)   # Пользователь активен сразу после регистрации
-        extra_fields.setdefault("is_staff", False)   # Нет доступа в админку
+        extra_fields.setdefault(
+            "is_active", True
+        )  # Пользователь активен сразу после регистрации
+        extra_fields.setdefault("is_staff", False)  # Нет доступа в админку
         extra_fields.setdefault("is_superuser", False)  # Не суперпользователь
 
         # Хэшируем пароль и сохраняем
@@ -51,9 +53,9 @@ class UserManager(BaseUserManager):
         Создаёт суперпользователя.
         """
         # Устанавливаем права
-        extra_fields.setdefault("is_staff", True)      # Доступ в админку
+        extra_fields.setdefault("is_staff", True)  # Доступ в админку
         extra_fields.setdefault("is_superuser", True)  # Все права
-        extra_fields.setdefault("is_active", True)     # Активен сразу
+        extra_fields.setdefault("is_active", True)  # Активен сразу
 
         # Валидация прав
         if not extra_fields.get("is_staff"):
@@ -114,12 +116,12 @@ class User(AbstractUser):
     )
     # deleted_by = кто выполнил удаление (ссылка на пользователя)
     deleted_by = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='deleted_users',
-        verbose_name="Кто удалил"
+        related_name="deleted_users",
+        verbose_name="Кто удалил",
     )
 
     # restored_at = дата восстановления (для аудита)
@@ -128,12 +130,12 @@ class User(AbstractUser):
     )
     # restored_by = кто выполнил восстановление (ссылка на пользователя)
     restored_by = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='restored_users',
-        verbose_name="Кто восстановил"
+        related_name="restored_users",
+        verbose_name="Кто восстановил",
     )
 
     # ==================================================================
@@ -168,9 +170,9 @@ class User(AbstractUser):
         3. Блокируем вход (is_active = False)
         Сама запись остаётся в БД — можно восстановить.
         """
-        self.deleted_at = timezone.now()      # Момент удаления
-        self.deleted_by = performed_by        # Кто удалил (админ или сам пользователь)
-        self.is_active = False                # Блокируем вход в систему
+        self.deleted_at = timezone.now()  # Момент удаления
+        self.deleted_by = performed_by  # Кто удалил (админ или сам пользователь)
+        self.is_active = False  # Блокируем вход в систему
         self.save()
 
     def restore(self, performed_by=None):
@@ -182,11 +184,11 @@ class User(AbstractUser):
         4. Запоминаем, кто восстановил (restored_by
         5. Разблокируем вход (is_active = True)
         """
-        self.deleted_at = None                # Очищаем метку удаления
-        self.deleted_by = None                # Очищаем, кто удалил
-        self.restored_at = timezone.now()     # Запоминаем момент восстановления
-        self.restored_by = performed_by       # Запоминаем, кто восстановил
-        self.is_active = True                 # Разблокируем вход
+        self.deleted_at = None  # Очищаем метку удаления
+        self.deleted_by = None  # Очищаем, кто удалил
+        self.restored_at = timezone.now()  # Запоминаем момент восстановления
+        self.restored_by = performed_by  # Запоминаем, кто восстановил
+        self.is_active = True  # Разблокируем вход
         self.save()
 
     @property

@@ -20,6 +20,7 @@ class IsModerator(permissions.BasePermission):
 
 class IsUserManager(permissions.BasePermission):
     """Проверяет, что пользователь в группе менеджеров пользователей или суперпользователь"""
+
     def has_permission(self, request, view):
         # Суперпользователь может всё
         if request.user.is_superuser:

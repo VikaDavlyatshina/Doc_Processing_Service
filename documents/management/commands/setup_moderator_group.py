@@ -1,6 +1,7 @@
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
+
 from documents.models import Document, DocumentLog
 
 
@@ -38,6 +39,7 @@ class Command(BaseCommand):
         # ПРАВА НА ПОЛЬЗОВАТЕЛЕЙ (только просмотр)
         # ================================================================
         from django.contrib.auth import get_user_model
+
         User = get_user_model()
         user_ct = ContentType.objects.get_for_model(User)
         user_perms = Permission.objects.filter(
@@ -54,7 +56,9 @@ class Command(BaseCommand):
         group, created = Group.objects.get_or_create(name="Document Moderator")
         group.permissions.set(all_permissions)
 
-        self.stdout.write(self.style.SUCCESS(
-            f"Группа {'создана' if created else 'обновлена'}. "
-            f"Назначено {all_permissions.count()} прав."
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Группа {'создана' if created else 'обновлена'}. "
+                f"Назначено {all_permissions.count()} прав."
+            )
+        )

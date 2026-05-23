@@ -1,6 +1,7 @@
-from PIL import Image
+from django.contrib.auth.password_validation import \
+    validate_password as django_validate_password
 from django.core.exceptions import ValidationError
-from django.contrib.auth.password_validation import validate_password as django_validate_password
+from PIL import Image
 
 
 def validate_avatar(value):
@@ -36,18 +37,12 @@ def validate_password(value):
     except ValidationError as e:
         # Словарь перевода ошибок
         error_messages = {
-            'This password is too short. It must contain at least 8 characters.':
-                'Пароль слишком короткий. Минимум 8 символов.',
-            'This password is too common.':
-                'Пароль слишком простой. Используйте более сложный пароль.',
-            'This password is entirely numeric.':
-                'Пароль не может состоять только из цифр.',
-            'The password is too similar to the email address.':
-                'Пароль слишком похож на email адрес.',
-            'The password is too similar to the first name.':
-                'Пароль слишком похож на имя.',
-            'The password is too similar to the last name.':
-                'Пароль слишком похож на фамилию.',
+            "This password is too short. It must contain at least 8 characters.": "Пароль слишком короткий. Минимум 8 символов.",
+            "This password is too common.": "Пароль слишком простой. Используйте более сложный пароль.",
+            "This password is entirely numeric.": "Пароль не может состоять только из цифр.",
+            "The password is too similar to the email address.": "Пароль слишком похож на email адрес.",
+            "The password is too similar to the first name.": "Пароль слишком похож на имя.",
+            "The password is too similar to the last name.": "Пароль слишком похож на фамилию.",
         }
         # Переводим первое сообщение об ошибке
         first_error = e.messages[0] if e.messages else str(e)
@@ -68,4 +63,3 @@ def validate_last_name(value):
     if not value or not value.strip():
         raise ValidationError("Фамилия обязательна")
     return value.strip()
-
