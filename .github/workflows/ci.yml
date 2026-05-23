@@ -123,24 +123,30 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Create docker-compose.yml on server
-        run: |
-          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/Doc_Processing_Service/docker-compose.yml
-
       - name: Deploy with Docker Compose
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            # Создаём папку проекта (если нет)
+          ssh -o StrictHostKeyChecking=no -T ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            # Создаём папку проекта
             mkdir -p /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             cd /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             
+            # Создаём docker-compose.yml
+            cat > docker-compose.yml << 'DOCKER_COMPOSE_EOF'
+            $(cat docker-compose.yml)
+            DOCKER_COMPOSE_EOF
+            
             # Создаём .env из секрета
-            echo '${{ secrets.PRODUCTION_ENV }}' > .env
+            cat > .env << 'ENV_EOF'
+            ${{ secrets.PRODUCTION_ENV }}
+            ENV_EOF
             
             # Запускаем контейнеры
             docker compose down
             docker compose pull
             docker compose up -d --build
+            
+            # Ждём готовности бэкенда
+            sleep 10
             
             # Применяем миграции
             docker compose exec -T backend python manage.py migrate
