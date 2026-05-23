@@ -110,7 +110,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      # ИСПРАВЛЕНО: Сначала физически копируем docker-compose.yml, nginx.conf и Dockerfile на сервер
+      # Сначала копируем docker-compose.yml, nginx.conf и Dockerfile на сервер
       - name: Copy project files to Server
         run: |
           rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
@@ -122,7 +122,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -T ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
             cd /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             
-            # Безопасно создаем .env из вашего секретного монолитного ключа PRODUCTION_ENV
+            # Безопасно создаем .env из ключа PRODUCTION_ENV
             echo \"${{ secrets.PRODUCTION_ENV }}\" > .env
             
             # Перезапускаем контейнеры со сборкой свежего кода

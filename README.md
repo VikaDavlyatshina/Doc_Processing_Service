@@ -131,10 +131,12 @@ docker compose up -d --build
 
 | Сервис | Локально (Docker) | Сервер |
 |--------|-------------------|--------|
-| Админка | http://localhost:8080/admin/ | http://89.169.174.52:8080/admin/ |
-| API | http://localhost:8080/api/ | http://89.169.174.52:8080/api/ |
-| Swagger | http://localhost:8080/api/docs/ | http://89.169.174.52:8080/api/docs/ |
-| ReDoc | http://localhost:8080/api/redoc/ | http://89.169.174.52:8080/api/redoc/ |
+| Админка | http://localhost:8080/admin/ | http://111.88.147.242:8080/admin/ |
+| API | http://localhost:8080/api/ | http://111.88.147.242:8080/api/ |
+| Swagger | http://localhost:8080/api/docs/ | http://111.88.147.242:8080/api/docs/ |
+| ReDoc | http://localhost:8080/api/redoc/ | http://111.88.147.242:8080/api/redoc/ 
+
+
 ## API Эндпоинты
 
 ### Пользователи
@@ -177,7 +179,7 @@ docker compose up -d --build
 python manage.py test
 ```
 
-Покрытие: 85%+ (отчёт: coverage_report.txt)
+Покрытие: 81+ (отчёт: coverage_report.txt)
 
 
 
@@ -215,6 +217,46 @@ docker compose exec redis redis-cli PING
  - Публикацию в Docker Hub
 
  - Деплой на сервер
+
+## Деплой на сервер
+
+### Подготовка сервера (однократно)
+
+```bash
+# 1. Подключитесь к серверу
+ssh пользователь@ip_сервера
+
+# 2. Установите Docker
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+# 3. Выйдите и зайдите заново
+exit
+ssh пользователь@ip_сервера
+
+# 4. Создайте папку проекта
+mkdir -p ~/Doc_Processing_Service
+```
+### Автоматический деплой
+
+**При каждом push в репозиторий GitHub Actions автоматически**:
+
+- Копирует файлы на сервер
+
+- Запускает контейнеры
+
+- Применяет миграции
+
+Проверка после деплоя
+
+```bash
+cd ~/Doc_Processing_Service
+docker compose ps
+```
+
 
 ## Планы по развитию проекта
 
