@@ -1,0 +1,144 @@
+# ============================================================================
+# ИМЯ ПАЙПЛАЙНА
+# ============================================================================
+name: DocProcessingService CI/CD Pipeline
+
+# ============================================================================
+# КОГДА ЗАПУСКАТЬ
+# ============================================================================
+on: [push, pull_request]
+
+jobs:
+
+  # ==========================================================================
+  # ЭТАП 1: ЛИНТИНГ
+  # ==========================================================================
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install flake8
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+      - name: Run Flake8
+        run: flake8 . --max-line-length=119
+
+  # ==========================================================================
+  # ЭТАП 2: ТЕСТЫ
+  # ==========================================================================
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        # Хелсчек Redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.create false
+          poetry install --no-interaction
+      - name: Run migrations
+        env:
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: test_password
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          REDIS_DB: 0
+          SECRET_KEY: test-secret
+          DEBUG: "True"
+        run: python manage.py migrate
+      - name: Run tests
+        env:
+          DB_NAME: test_db
+          DB_USER: test_user
+          DB_PASSWORD: test_password
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          REDIS_DB: 0
+          SECRET_KEY: test-secret
+          DEBUG: "True"
+        run: python manage.py test
+
+  # ==========================================================================
+  # ЭТАП 3: СБОРКА И ПУБЛИКАЦИЯ
+  # ==========================================================================
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        run: echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+      - name: Build and Push
+        run: |
+          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/docflow:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/docflow:${{ github.sha }}
+
+  # ==========================================================================
+  # ЭТАП 4: ДЕПЛОЙ
+  # ==========================================================================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Copy project files
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude '.git' --exclude '__pycache__' --exclude '.venv' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/docflow/
+
+      - name: Deploy with Docker Compose
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            cd /home/${{ secrets.SSH_USER }}/docflow
+          
+            # Записываем ВСЕ настройки из одного секрета одной командой
+            echo \"${{ secrets.PRODUCTION_ENV }}\" > .env
+          
+            # Перезапускаем проект
+            docker compose down
+            docker compose up -d --build
+          "
