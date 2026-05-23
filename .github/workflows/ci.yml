@@ -33,6 +33,27 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: lint
+
+    # Общие переменные для всего этапа
+    env:
+      DB_NAME: test_db
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      SECRET_KEY: test-secret
+      DEBUG: "True"
+      LANGUAGE_CODE: "en-us"
+      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      EMAIL_HOST: smtp.gmail.com
+      EMAIL_PORT: "587"
+      EMAIL_HOST_USER: ""
+      EMAIL_HOST_PASSWORD: ""
+      EMAIL_USE_TLS: "True"
+
     services:
       postgres:
         image: postgres:17-alpine
@@ -51,12 +72,12 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
-        # Хелсчек Redis
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,36 +92,8 @@ jobs:
           poetry config virtualenvs.create false
           poetry install --no-interaction
       - name: Run migrations
-        env:
-          DB_NAME: test_db
-          DB_USER: test_user
-          DB_PASSWORD: test_password
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          REDIS_HOST: 127.0.0.1
-          REDIS_PORT: 6379
-          REDIS_DB: 0
-          SECRET_KEY: test-secret
-          DEBUG: "True"
-          EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
-          EMAIL_HOST: smtp.gmail.com
-          EMAIL_PORT: "587"
-          EMAIL_HOST_USER: ""
-          EMAIL_HOST_PASSWORD: ""
-          EMAIL_USE_TLS: "True"
         run: python manage.py migrate
       - name: Run tests
-        env:
-          DB_NAME: test_db
-          DB_USER: test_user
-          DB_PASSWORD: test_password
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          REDIS_HOST: 127.0.0.1
-          REDIS_PORT: 6379
-          REDIS_DB: 0
-          SECRET_KEY: test-secret
-          DEBUG: "True"
         run: python manage.py test
 
   # ==========================================================================
@@ -133,18 +126,28 @@ jobs:
       - name: Copy project files
         run: |
           rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
-            --exclude '.git' --exclude '__pycache__' --exclude '.venv' \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/docflow/
+            --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude '.env' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/Doc_Processing_Service/
 
       - name: Deploy with Docker Compose
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            cd /home/${{ secrets.SSH_USER }}/docflow
-          
+            cd /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
+            
             # Записываем ВСЕ настройки из одного секрета одной командой
-            echo \"${{ secrets.PRODUCTION_ENV }}\" > .env
-          
+            echo '${{ secrets.PRODUCTION_ENV }}' > .env
+            
             # Перезапускаем проект
             docker compose down
             docker compose up -d --build
+            
+            # Применяем миграции
+            docker compose exec -T backend python manage.py migrate
+            
+            # Создаём группы
+            docker compose exec -T backend python manage.py setup_moderator_group
+            docker compose exec -T backend python manage.py setup_user_manager_group
+            
+            # Очищаем неиспользуемые образы
+            docker image prune -f
           "
