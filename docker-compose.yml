@@ -26,7 +26,7 @@ services:
       POSTGRES_USER: ${DB_USER}                  # Пользователь БД
       POSTGRES_PASSWORD: ${DB_PASSWORD}          # Пароль
     ports:
-      - "5432:5432"                              # Стандартный порт PostgreSQL
+      - "5433:5432"                              # Стандартный порт PostgreSQL
     volumes:
       - postgres_data:/var/lib/postgresql/data   # Том для сохранения данных
     healthcheck:                                 # Проверка, что БД готова к работе
@@ -44,7 +44,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"                              # Стандартный порт Redis
+      - "6380:6379"                              # Стандартный порт Redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -69,7 +69,7 @@ services:
              python manage.py createsuperuser --noinput || true && 
              gunicorn config.wsgi:application --bind 0.0.0.0:8000"
     ports:
-      - "8000:8000"                              # Порт Gunicorn
+      - "8001:8000"                              # Порт Gunicorn
     env_file:
       - .env
     depends_on:                                   # Запускается только после PostgreSQL и Redis
@@ -127,7 +127,7 @@ services:
   nginx:
     image: nginx:latest
     ports:
-      - "8080:8080"                           # HTTP (стандартный порт сайтов)
+      - "8080:80"                         # HTTP (стандартный порт сайтов)
       - "443:443"                                # HTTPS (если настроите SSL)
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf       # Конфигурация Nginx
