@@ -5,6 +5,7 @@
 
 from io import BytesIO
 
+from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.files.base import ContentFile
@@ -14,251 +15,249 @@ from documents.models import Document
 
 User = get_user_model()
 
-print("=" * 60)
-print("СОЗДАНИЕ ТЕСТОВЫХ ДАННЫХ ДЛЯ DOCFLOW")
-print("=" * 60)
 
+class Command(BaseCommand):
+    help = 'Создаёт тестовые данные для DocFlow'
 
-# ============================================================================
-# 1. СОЗДАНИЕ ГРУПП (если не созданы)
-# ============================================================================
+    def handle(self, *args, **options):
+        self.stdout.write("=" * 60)
+        self.stdout.write("СОЗДАНИЕ ТЕСТОВЫХ ДАННЫХ ДЛЯ DOCFLOW")
+        self.stdout.write("=" * 60)
 
-print("\n1. Проверка и создание групп...")
+        # ====================================================================
+        # 1. СОЗДАНИЕ ГРУПП (если не созданы)
+        # ====================================================================
 
-# Группа модераторов документов
-moderator_group, _ = Group.objects.get_or_create(name="Document Moderator")
-print("   - Группа 'Document Moderator':", "создана" if not _ else "существует")
+        self.stdout.write("\n1. Проверка и создание групп...")
 
-# Группа менеджеров пользователей
-user_manager_group, _ = Group.objects.get_or_create(name="User Manager")
-print("   - Группа 'User Manager':", "создана" if not _ else "существует")
+        # Группа модераторов документов
+        moderator_group, created = Group.objects.get_or_create(name="Document Moderator")
+        self.stdout.write(f"   - Группа 'Document Moderator': {'создана' if created else 'существует'}")
 
-# Группа админов (обычно не создаётся, но для полноты)
-admin_group, _ = Group.objects.get_or_create(name="Admin")
-print("   - Группа 'Admin':", "создана" if not _ else "существует")
+        # Группа менеджеров пользователей
+        user_manager_group, created = Group.objects.get_or_create(name="User Manager")
+        self.stdout.write(f"   - Группа 'User Manager': {'создана' if created else 'существует'}")
 
+        # Группа админов (обычно не создаётся, но для полноты)
+        admin_group, created = Group.objects.get_or_create(name="Admin")
+        self.stdout.write(f"   - Группа 'Admin': {'создана' if created else 'существует'}")
 
-# ============================================================================
-# 2. СОЗДАНИЕ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ
-# ============================================================================
+        # ====================================================================
+        # 2. СОЗДАНИЕ ТЕСТОВЫХ ПОЛЬЗОВАТЕЛЕЙ
+        # ====================================================================
 
-print("\n2. Создание тестовых пользователей...")
+        self.stdout.write("\n2. Создание тестовых пользователей...")
 
-# Суперпользователь (администратор)
-admin, created = User.objects.get_or_create(
-    email="admin@docflow.com",
-    defaults={
-        "first_name": "Администратор",
-        "last_name": "Системы",
-        "phone": "+79990000001",
-        "is_staff": True,
-        "is_superuser": True,
-        "is_active": True,
-    },
-)
-if created:
-    admin.set_password("Admin123!")
-    admin.save()
-    print(f"   ✅ Создан: {admin.email} (пароль: Admin123!)")
-else:
-    print(f"   📌 Существует: {admin.email}")
+        # Суперпользователь (администратор)
+        admin, created = User.objects.get_or_create(
+            email="admin@docflow.com",
+            defaults={
+                "first_name": "Администратор",
+                "last_name": "Системы",
+                "phone": "+79990000001",
+                "is_staff": True,
+                "is_superuser": True,
+                "is_active": True,
+            },
+        )
+        if created:
+            admin.set_password("Admin123!")
+            admin.save()
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Создан: {admin.email} (пароль: Admin123!)"))
+        else:
+            self.stdout.write(f"   📌 Существует: {admin.email}")
 
-# Модератор документов
-moderator, created = User.objects.get_or_create(
-    email="moderator@docflow.com",
-    defaults={
-        "first_name": "Модератор",
-        "last_name": "Документов",
-        "phone": "+79990000002",
-        "is_staff": True,
-        "is_active": True,
-    },
-)
-if created:
-    moderator.set_password("Moderator123!")
-    moderator.save()
-    moderator.groups.add(moderator_group)
-    print(f"   ✅ Создан: {moderator.email} (пароль: Moderator123!)")
-else:
-    print(f"   📌 Существует: {moderator.email}")
+        # Модератор документов
+        moderator, created = User.objects.get_or_create(
+            email="moderator@docflow.com",
+            defaults={
+                "first_name": "Модератор",
+                "last_name": "Документов",
+                "phone": "+79990000002",
+                "is_staff": True,
+                "is_active": True,
+            },
+        )
+        if created:
+            moderator.set_password("Moderator123!")
+            moderator.save()
+            moderator.groups.add(moderator_group)
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Создан: {moderator.email} (пароль: Moderator123!)"))
+        else:
+            self.stdout.write(f"   📌 Существует: {moderator.email}")
 
-# Менеджер пользователей
-user_manager, created = User.objects.get_or_create(
-    email="usermanager@docflow.com",
-    defaults={
-        "first_name": "Менеджер",
-        "last_name": "Пользователей",
-        "phone": "+79990000003",
-        "is_staff": True,
-        "is_active": True,
-    },
-)
-if created:
-    user_manager.set_password("UserMan123!")
-    user_manager.save()
-    user_manager.groups.add(user_manager_group)
-    print(f"   ✅ Создан: {user_manager.email} (пароль: UserMan123!)")
-else:
-    print(f"   📌 Существует: {user_manager.email}")
+        # Менеджер пользователей
+        user_manager, created = User.objects.get_or_create(
+            email="usermanager@docflow.com",
+            defaults={
+                "first_name": "Менеджер",
+                "last_name": "Пользователей",
+                "phone": "+79990000003",
+                "is_staff": True,
+                "is_active": True,
+            },
+        )
+        if created:
+            user_manager.set_password("UserMan123!")
+            user_manager.save()
+            user_manager.groups.add(user_manager_group)
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Создан: {user_manager.email} (пароль: UserMan123!)"))
+        else:
+            self.stdout.write(f"   📌 Существует: {user_manager.email}")
 
-# Обычные пользователи
-users = []
-for i in range(1, 4):
-    user, created = User.objects.get_or_create(
-        email=f"user{i}@docflow.com",
-        defaults={
-            "first_name": f"Пользователь{i}",
-            "last_name": f"Фамилия{i}",
-            "phone": f"+7999000000{i}",
-            "is_active": True,
-        },
-    )
-    if created:
-        user.set_password(f"User{i}123!")
-        user.save()
-        print(f"   ✅ Создан: {user.email} (пароль: User{i}123!)")
-    else:
-        print(f"   📌 Существует: {user.email}")
-    users.append(user)
+        # Обычные пользователи
+        users = []
+        for i in range(1, 4):
+            user, created = User.objects.get_or_create(
+                email=f"user{i}@docflow.com",
+                defaults={
+                    "first_name": f"Пользователь{i}",
+                    "last_name": f"Фамилия{i}",
+                    "phone": f"+7999000000{i}",
+                    "is_active": True,
+                },
+            )
+            if created:
+                user.set_password(f"User{i}123!")
+                user.save()
+                self.stdout.write(self.style.SUCCESS(f"   ✅ Создан: {user.email} (пароль: User{i}123!)"))
+            else:
+                self.stdout.write(f"   📌 Существует: {user.email}")
+            users.append(user)
 
-# Удалённый пользователь (для теста восстановления)
-deleted_user, created = User.objects.get_or_create(
-    email="deleted@docflow.com",
-    defaults={
-        "first_name": "Удалённый",
-        "last_name": "Пользователь",
-        "phone": "+79990000099",
-        "is_active": False,
-    },
-)
-if created:
-    deleted_user.set_password("Deleted123!")
-    deleted_user.save()
-    deleted_user.soft_delete(performed_by=admin)
-    print(f"   ✅ Создан и удалён: {deleted_user.email} (пароль: Deleted123!)")
-else:
-    print("   📌 Существует (возможно удалён):", deleted_user.email)
+        # Удалённый пользователь (для теста восстановления)
+        deleted_user, created = User.objects.get_or_create(
+            email="deleted@docflow.com",
+            defaults={
+                "first_name": "Удалённый",
+                "last_name": "Пользователь",
+                "phone": "+79990000099",
+                "is_active": False,
+            },
+        )
+        if created:
+            deleted_user.set_password("Deleted123!")
+            deleted_user.save()
+            deleted_user.soft_delete(performed_by=admin)
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Создан и удалён: {deleted_user.email} (пароль: Deleted123!)"))
+        else:
+            self.stdout.write(f"   📌 Существует (возможно удалён): {deleted_user.email}")
 
+        # ====================================================================
+        # 3. ФУНКЦИИ ДЛЯ СОЗДАНИЯ ТЕСТОВЫХ ФАЙЛОВ
+        # ====================================================================
 
-# ============================================================================
-# 3. ФУНКЦИЯ ДЛЯ СОЗДАНИЯ ТЕСТОВЫХ ФАЙЛОВ
-# ============================================================================
+        def create_test_pdf(filename):
+            """Создаёт тестовый PDF файл в памяти"""
+            content = b"%PDF-1.4\n%\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 100 700 Td (Test document) Tj ET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000215 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n298\n%%EOF"
+            return ContentFile(content, name=filename)
 
+        def create_test_image(filename):
+            """Создаёт тестовое изображение в памяти"""
+            img = Image.new("RGB", (100, 100), color="red")
+            img_io = BytesIO()
+            img.save(img_io, format="PNG")
+            return ContentFile(img_io.getvalue(), name=filename)
 
-def create_test_pdf(filename):
-    """Создаёт тестовый PDF файл в памяти"""
-    content = b"%PDF-1.4\n%\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 100 700 Td (Test document) Tj ET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000215 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n298\n%%EOF"
-    return ContentFile(content, name=filename)
+        # ====================================================================
+        # 4. СОЗДАНИЕ ТЕСТОВЫХ ДОКУМЕНТОВ
+        # ====================================================================
 
+        self.stdout.write("\n3. Создание тестовых документов...")
 
-def create_test_image(filename):
-    """Создаёт тестовое изображение в памяти"""
-    img = Image.new("RGB", (100, 100), color="red")
-    img_io = BytesIO()
-    img.save(img_io, format="PNG")
-    return ContentFile(img_io.getvalue(), name=filename)
+        # Создаём тестовые файлы
+        test_pdf = create_test_pdf("document.pdf")
+        test_image = create_test_image("document.png")
 
+        # Документ в статусе DRAFT (черновик)
+        doc_draft = Document.objects.create(
+            user=users[0],
+            file=test_pdf,
+            user_note="Черновик заявления на отпуск",
+            status="draft",
+        )
+        doc_draft.log_action(user=users[0], action="created", new_status="draft")
+        self.stdout.write(f"   ✅ Документ DRAFT: ID={doc_draft.id} (пользователь: {users[0].email})")
 
-# ============================================================================
-# 4. СОЗДАНИЕ ТЕСТОВЫХ ДОКУМЕНТОВ
-# ============================================================================
+        # Документ в статусе PENDING (на проверке)
+        doc_pending = Document.objects.create(
+            user=users[1],
+            file=test_pdf,
+            user_note="Заявление на отпуск с 1 июня",
+            status="pending",
+        )
+        doc_pending.log_action(user=users[1], action="created", new_status="draft")
+        doc_pending.log_action(
+            user=users[1], action="submitted", old_status="draft", new_status="pending"
+        )
+        self.stdout.write(f"   ✅ Документ PENDING: ID={doc_pending.id} (пользователь: {users[1].email})")
 
-print("\n3. Создание тестовых документов...")
+        # Документ в статусе APPROVED (подтверждён)
+        doc_approved = Document.objects.create(
+            user=users[0], file=test_pdf, user_note="Заявление на премию", status="approved"
+        )
+        doc_approved.log_action(user=users[0], action="created", new_status="draft")
+        doc_approved.log_action(
+            user=users[0], action="submitted", old_status="draft", new_status="pending"
+        )
+        doc_approved.approve(moderator=moderator)
+        self.stdout.write(f"   ✅ Документ APPROVED: ID={doc_approved.id} (проверил: {moderator.email})")
 
-# Создаём тестовые файлы
-test_pdf = create_test_pdf("document.pdf")
-test_image = create_test_image("document.png")
+        # Документ в статусе REJECTED (отклонён с комментарием)
+        doc_rejected = Document.objects.create(
+            user=users[1], file=test_image, user_note="Скан паспорта", status="rejected"
+        )
+        doc_rejected.log_action(user=users[1], action="created", new_status="draft")
+        doc_rejected.log_action(
+            user=users[1], action="submitted", old_status="draft", new_status="pending"
+        )
+        doc_rejected.reject(
+            moderator=moderator, comment="Нечитаемый скан, загрузите чёткую копию"
+        )
+        self.stdout.write(f"   ✅ Документ REJECTED: ID={doc_rejected.id} (причина: Нечитаемый скан)")
 
-# Документ в статусе DRAFT (черновик)
-doc_draft = Document.objects.create(
-    user=users[0],
-    file=test_pdf,
-    user_note="Черновик заявления на отпуск",
-    status="draft",
-)
-doc_draft.log_action(user=users[0], action="created", new_status="draft")
-print(f"   ✅ Документ DRAFT: ID={doc_draft.id} (пользователь: {users[0].email})")
+        # Ещё один документ в статусе PENDING для демонстрации
+        doc_pending2 = Document.objects.create(
+            user=users[2], file=test_pdf, user_note="Отчёт о работе за май", status="pending"
+        )
+        doc_pending2.log_action(user=users[2], action="created", new_status="draft")
+        doc_pending2.log_action(
+            user=users[2], action="submitted", old_status="draft", new_status="pending"
+        )
+        self.stdout.write(f"   ✅ Документ PENDING: ID={doc_pending2.id} (пользователь: {users[2].email})")
 
-# Документ в статусе PENDING (на проверке)
-doc_pending = Document.objects.create(
-    user=users[1],
-    file=test_pdf,
-    user_note="Заявление на отпуск с 1 июня",
-    status="pending",
-)
-doc_pending.log_action(user=users[1], action="created", new_status="draft")
-doc_pending.log_action(
-    user=users[1], action="submitted", old_status="draft", new_status="pending"
-)
-print(f"   ✅ Документ PENDING: ID={doc_pending.id} (пользователь: {users[1].email})")
+        # ====================================================================
+        # 5. ВЫВОД ИТОГОВ
+        # ====================================================================
 
-# Документ в статусе APPROVED (подтверждён)
-doc_approved = Document.objects.create(
-    user=users[0], file=test_pdf, user_note="Заявление на премию", status="approved"
-)
-doc_approved.log_action(user=users[0], action="created", new_status="draft")
-doc_approved.log_action(
-    user=users[0], action="submitted", old_status="draft", new_status="pending"
-)
-doc_approved.approve(moderator=moderator)
-print(f"   ✅ Документ APPROVED: ID={doc_approved.id} (проверил: {moderator.email})")
+        self.stdout.write("\n" + "=" * 60)
+        self.stdout.write("ИТОГИ СОЗДАНИЯ ТЕСТОВЫХ ДАННЫХ")
+        self.stdout.write("=" * 60)
 
-# Документ в статусе REJECTED (отклонён с комментарием)
-doc_rejected = Document.objects.create(
-    user=users[1], file=test_image, user_note="Скан паспорта", status="rejected"
-)
-doc_rejected.log_action(user=users[1], action="created", new_status="draft")
-doc_rejected.log_action(
-    user=users[1], action="submitted", old_status="draft", new_status="pending"
-)
-doc_rejected.reject(
-    moderator=moderator, comment="Нечитаемый скан, загрузите чёткую копию"
-)
-print(f"   ✅ Документ REJECTED: ID={doc_rejected.id} (причина: Нечитаемый скан)")
+        self.stdout.write("\n👥 ПОЛЬЗОВАТЕЛИ:")
+        self.stdout.write("   - Администратор: admin@docflow.com / Admin123!")
+        self.stdout.write("   - Модератор документов: moderator@docflow.com / Moderator123!")
+        self.stdout.write("   - Менеджер пользователей: usermanager@docflow.com / UserMan123!")
+        for i, user in enumerate(users, 1):
+            self.stdout.write(f"   - Пользователь{i}: user{i}@docflow.com / User{i}123!")
+        self.stdout.write("   - Удалённый пользователь: deleted@docflow.com / Deleted123!")
 
-# Ещё один документ в статусе PENDING для демонстрации
-doc_pending2 = Document.objects.create(
-    user=users[2], file=test_pdf, user_note="Отчёт о работе за май", status="pending"
-)
-doc_pending2.log_action(user=users[2], action="created", new_status="draft")
-doc_pending2.log_action(
-    user=users[2], action="submitted", old_status="draft", new_status="pending"
-)
-print(f"   ✅ Документ PENDING: ID={doc_pending2.id} (пользователь: {users[2].email})")
+        self.stdout.write("\n📄 ДОКУМЕНТЫ:")
+        self.stdout.write(f"   - Черновик (draft): ID={doc_draft.id}")
+        self.stdout.write(f"   - На проверке (pending): ID={doc_pending.id}, ID={doc_pending2.id}")
+        self.stdout.write(f"   - Подтверждён (approved): ID={doc_approved.id}")
+        self.stdout.write(f"   - Отклонён (rejected): ID={doc_rejected.id}")
 
+        self.stdout.write("\n📊 СТАТИСТИКА:")
+        self.stdout.write(f"   - Всего пользователей: {User.objects.count()}")
+        self.stdout.write(f"   - Активных пользователей: {User.objects.active().count()}")
+        self.stdout.write(f"   - Мягко удалённых: {User.objects.filter(deleted_at__isnull=False).count()}")
+        self.stdout.write(f"   - Всего документов: {Document.objects.count()}")
+        self.stdout.write(f"   - Черновиков: {Document.objects.filter(status='draft').count()}")
+        self.stdout.write(f"   - На проверке: {Document.objects.filter(status='pending').count()}")
+        self.stdout.write(f"   - Подтверждённых: {Document.objects.filter(status='approved').count()}")
+        self.stdout.write(f"   - Отклонённых: {Document.objects.filter(status='rejected').count()}")
 
-# ============================================================================
-# 5. ВЫВОД ИТОГОВ
-# ============================================================================
-
-print("\n" + "=" * 60)
-print("ИТОГИ СОЗДАНИЯ ТЕСТОВЫХ ДАННЫХ")
-print("=" * 60)
-
-print("\n👥 ПОЛЬЗОВАТЕЛИ:")
-print("   - Администратор: admin@docflow.com / Admin123!")
-print("   - Модератор документов: moderator@docflow.com / Moderator123!")
-print("   - Менеджер пользователей: usermanager@docflow.com / UserMan123!")
-for i, user in enumerate(users, 1):
-    print(f"   - Пользователь{i}: user{i}@docflow.com / User{i}123!")
-print("   - Удалённый пользователь: deleted@docflow.com / Deleted123!")
-
-print("\n📄 ДОКУМЕНТЫ:")
-print(f"   - Черновик (draft): ID={doc_draft.id}")
-print(f"   - На проверке (pending): ID={doc_pending.id}, ID={doc_pending2.id}")
-print(f"   - Подтверждён (approved): ID={doc_approved.id}")
-print(f"   - Отклонён (rejected): ID={doc_rejected.id}")
-
-print("\n📊 СТАТИСТИКА:")
-print(f"   - Всего пользователей: {User.objects.count()}")
-print(f"   - Активных пользователей: {User.objects.active().count()}")
-print(f"   - Мягко удалённых: {User.objects.filter(deleted_at__isnull=False).count()}")
-print(f"   - Всего документов: {Document.objects.count()}")
-print(f"   - Черновиков: {Document.objects.filter(status='draft').count()}")
-print(f"   - На проверке: {Document.objects.filter(status='pending').count()}")
-print(f"   - Подтверждённых: {Document.objects.filter(status='approved').count()}")
-print(f"   - Отклонённых: {Document.objects.filter(status='rejected').count()}")
-
-print("\n" + "=" * 60)
-print("ТЕСТОВЫЕ ДАННЫЕ УСПЕШНО СОЗДАНЫ")
-print("=" * 60)
+        self.stdout.write("\n" + "=" * 60)
+        self.stdout.write(self.style.SUCCESS("ТЕСТОВЫЕ ДАННЫЕ УСПЕШНО СОЗДАНЫ"))
+        self.stdout.write("=" * 60)
