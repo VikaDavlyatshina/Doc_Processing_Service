@@ -42,6 +42,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             "updated_at",
             "reviewed_by",  # заполняется при approve/reject
             "reviewed_at",  # заполняется при approve/reject
+            "comment",
         ]
         extra_kwargs = {
             "user_note": {

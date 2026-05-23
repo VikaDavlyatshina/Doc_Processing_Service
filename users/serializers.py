@@ -1,7 +1,9 @@
 from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers
+
 from .models import User
-from .validators import validate_avatar, validate_first_name, validate_last_name
+from .validators import (validate_avatar, validate_first_name,
+                         validate_last_name)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -22,6 +24,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = ["id", "email", "phone", "password", "first_name", "last_name"]
         # ID генерируется автоматически, пользователь не может его указать
         read_only_fields = ["id"]
+        extra_kwargs = {
+            "email": {
+                "validators": [],  # Убираем стандартнуб проверку Джанго
+            }
+        }
 
     # ========================================================================
     # ВАЛИДАЦИЯ ПОЛЕЙ
@@ -81,6 +88,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             **validated_data,
         )
 
+
 class UserSerializer(serializers.ModelSerializer):
     """
     Сериализатор для просмотра и редактирования профиля пользователя.
@@ -97,5 +105,5 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "email"]
 
     def validate_avatar(self, value):
-        """ Проверка аватара """
+        """Проверка аватара"""
         return validate_avatar(value)
