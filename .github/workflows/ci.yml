@@ -97,64 +97,48 @@ jobs:
         run: python manage.py test
 
   # ==========================================================================
-  # ЭТАП 3: СБОРКА И ПУБЛИКАЦИЯ
-  # ==========================================================================
-  build:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-      - name: Login to Docker Hub
-        run: echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-      - name: Build and Push
-        run: |
-          docker build -t ${{ secrets.DOCKER_HUB_USERNAME }}/docflow:${{ github.sha }} .
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/docflow:${{ github.sha }}
-
-  # ==========================================================================
-  # ЭТАП 4: ДЕПЛОЙ
+  # ЭТАП 3: ДЕПЛОЙ (Сборка происходит прямо на вашем сервере)
   # ==========================================================================
   deploy:
     runs-on: ubuntu-latest
-    needs: build
+    needs: test # Запускается строго после успешного прохождения тестов
     steps:
       - uses: actions/checkout@v4
-      - uses: webfactory/ssh-agent@v0.9.0
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      # ИСПРАВЛЕНО: Сначала физически копируем docker-compose.yml, nginx.conf и Dockerfile на сервер
+      - name: Copy project files to Server
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
+            --exclude '.git' --exclude '__pycache__' --exclude '.venv' \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/Doc_Processing_Service/
 
       - name: Deploy with Docker Compose
         run: |
           ssh -o StrictHostKeyChecking=no -T ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
-            # Создаём папку проекта
-            mkdir -p /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             cd /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             
-            # Создаём docker-compose.yml
-            cat > docker-compose.yml << 'DOCKER_COMPOSE_EOF'
-            $(cat docker-compose.yml)
-            DOCKER_COMPOSE_EOF
+            # Безопасно создаем .env из вашего секретного монолитного ключа PRODUCTION_ENV
+            echo \"${{ secrets.PRODUCTION_ENV }}\" > .env
             
-            # Создаём .env из секрета
-            cat > .env << 'ENV_EOF'
-            ${{ secrets.PRODUCTION_ENV }}
-            ENV_EOF
-            
-            # Запускаем контейнеры
+            # Перезапускаем контейнеры со сборкой свежего кода
             docker compose down
-            docker compose pull
             docker compose up -d --build
             
-            # Ждём готовности бэкенда
+            # Ждём готовности базы данных и бэкенда к миграциям
             sleep 10
             
-            # Применяем миграции
+            # Применяем миграции внутри контейнера (Флаг -T обязателен для CI/CD!)
             docker compose exec -T backend python manage.py migrate
             
-            # Создаём группы
+            # Инициализируем ролевые группы прав доступа
             docker compose exec -T backend python manage.py setup_moderator_group
             docker compose exec -T backend python manage.py setup_user_manager_group
             
-            # Очистка
+            # Очищаем старые неиспользуемые Docker-слои для экономии места на диске
             docker image prune -f
           "
