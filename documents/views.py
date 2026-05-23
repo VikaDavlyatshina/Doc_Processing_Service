@@ -1,15 +1,56 @@
 from django.core.exceptions import PermissionDenied
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from documents.models import Document
-from users.permissions import IsModerator, IsOwnerOnly
 from documents.serializers import DocumentSerializer
 from documents.services import (approve_document, reject_document,
                                 replace_document_file, send_document_to_review)
+from users.permissions import IsModerator, IsOwnerOnly
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary="Список документов",
+        description="Возвращает список документов. Модераторы видят все (кроме черновиков), обычные пользователи — только свои.",
+        tags=["documents"],
+    ),
+    create=extend_schema(
+        summary="👤 Создать документ (обычный пользователь)",
+        description="Создаёт новый документ. Требует файл и комментарий (user_note).",
+        request={
+            "multipart/form-data": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "description": "Загружаемый файл (PDF, JPEG, PNG, DOC, DOCX)",
+                    },
+                    "user_note": {
+                        "type": "string",
+                        "description": "Короткий комментарий к документу (обязательно)",
+                    },
+                },
+                "required": ["file", "user_note"],
+            }
+        },
+        responses={201: DocumentSerializer},
+        tags=["documents-owner"],
+    ),
+    retrieve=extend_schema(
+        summary="Просмотр документа",
+        description="Возвращает информацию о конкретном документе.",
+        tags=["documents"],
+    ),
+    destroy=extend_schema(
+        summary="Удалить документ",
+        description="Удаляет документ. Только для владельца.",
+        tags=["documents"],
+    ),
+)
 class DocumentViewSet(viewsets.ModelViewSet):
     """
     Основной ViewSet для работы с документами (CRUD + создание).
@@ -20,6 +61,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
     - GET    /api/documents/{id}/      -> просмотр одного документа
     - DELETE /api/documents/{id}/      -> удалить документ (только владелец)
     """
+
+    # Доступные методы
+    http_method_names = ["get", "post", "delete"]
 
     # Сериализатор для преобразования объектов Document в JSON и обратно
     serializer_class = DocumentSerializer
@@ -54,10 +98,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         """
         # Удалить документ может только его владелец (проверка через кастомный permission)
         if self.action == "destroy":
-            return [permissions.IsAuthenticated(), IsOwnerOnly()]
+            return [permissions.IsAuthenticated, IsOwnerOnly]
 
         # Все остальные действия требуют только авторизации
-        return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):
         """
@@ -85,10 +129,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         # Логируем удаление
         instance.log_action(
-            user=user,
-            action='deleted',
-            old_status=instance.status,
-            new_status=None
+            user=user, action="deleted", old_status=instance.status, new_status=None
         )
 
         # Удаляем файл с диска
@@ -99,6 +140,34 @@ class DocumentViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+@extend_schema_view(
+    update_file=extend_schema(
+        summary="👤 Заменить файл (только владелец)",
+        description="Заменяет файл документа.  Статус меняется на 'pending' и отправляется на проверку Модератору",
+        request={
+            "multipart/form-data": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "description": "Новый файл (PDF, JPEG, PNG, DOC, DOCX)",
+                    },
+                },
+                "required": ["file"],
+            }
+        },
+        responses={200: None},
+        tags=["documents-owner"],
+    ),
+    submit=extend_schema(
+        summary="👤 Отправить на проверку",
+        description="Отправляет черновик на проверку модератору. Статус меняется с 'draft' на 'pending'. Доступно только владельцу документа.",
+        request=None,
+        responses={200: None},
+        tags=["documents-owner"],
+    ),
+)
 class DocumentOwnerViewSet(viewsets.GenericViewSet):
     """
     ViewSet для действий, доступных ТОЛЬКО ВЛАДЕЛЬЦУ документа.
@@ -164,6 +233,40 @@ class DocumentOwnerViewSet(viewsets.GenericViewSet):
         return Response(result)
 
 
+@extend_schema_view(
+    approve=extend_schema(
+        summary="🔒 Подтвердить документ (только модератор)",
+        description="Подтверждает документ. Статус становится 'approved'. **Доступно только модераторам документов.**",
+        request=None,
+        responses={
+            200: None,
+            403: {"description": "Доступ запрещён. Требуются права модератора."},
+        },
+        tags=["documents-moderation"],
+    ),
+    reject=extend_schema(
+        summary="🔒 Отклонить документ (только модератор)",
+        description="Отклоняет документ с указанием причины. Комментарий обязателен. **Доступно только модераторам документов.**",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {
+                    "comment": {
+                        "type": "string",
+                        "description": "Причина отклонения (обязательно)",
+                    },
+                },
+                "required": ["comment"],
+            }
+        },
+        responses={
+            200: None,
+            400: {"description": "Комментарий не указан"},
+            403: {"description": "Доступ запрещён. Требуются права модератора."},
+        },
+        tags=["documents-moderation"],
+    ),
+)
 class DocumentModerationViewSet(viewsets.GenericViewSet):
     """
     ViewSet для действий, доступных ТОЛЬКО МОДЕРАТОРУ.
