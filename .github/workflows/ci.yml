@@ -123,22 +123,23 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      - name: Copy project files
+      - name: Create docker-compose.yml on server
         run: |
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" \
-            --exclude '.git' --exclude '__pycache__' --exclude '.venv' --exclude '.env' \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/Doc_Processing_Service/
+          scp -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }}:/home/${{ secrets.SSH_USER }}/Doc_Processing_Service/docker-compose.yml
 
       - name: Deploy with Docker Compose
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} "
+            # Создаём папку проекта (если нет)
+            mkdir -p /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             cd /home/${{ secrets.SSH_USER }}/Doc_Processing_Service
             
-            # Записываем ВСЕ настройки из одного секрета одной командой
+            # Создаём .env из секрета
             echo '${{ secrets.PRODUCTION_ENV }}' > .env
             
-            # Перезапускаем проект
+            # Запускаем контейнеры
             docker compose down
+            docker compose pull
             docker compose up -d --build
             
             # Применяем миграции
@@ -148,6 +149,6 @@ jobs:
             docker compose exec -T backend python manage.py setup_moderator_group
             docker compose exec -T backend python manage.py setup_user_manager_group
             
-            # Очищаем неиспользуемые образы
+            # Очистка
             docker image prune -f
           "
