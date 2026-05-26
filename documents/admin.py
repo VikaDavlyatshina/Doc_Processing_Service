@@ -91,9 +91,17 @@ class DocumentAdmin(admin.ModelAdmin):
                 old_status=old_status,
                 new_status=new_status,
             )
+
+            # Отправляем email пользователю
+            from documents.tasks import notify_user_document_approved, notify_user_document_rejected
+
+            if new_status == "approved":
+                notify_user_document_approved.delay(obj.id)
+            elif new_status == "rejected":
+                notify_user_document_rejected.delay(obj.id)
+
             self.message_user(
-                request, f"Статус документа #{obj.id} изменён", messages.SUCCESS
-            )
+                request, f"Статус документа #{obj.id} изменён", messages.SUCCESS)
 
     def file_link(self, obj):
         if obj.file:
