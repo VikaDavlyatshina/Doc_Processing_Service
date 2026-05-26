@@ -39,8 +39,6 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # Если в .env написано DEBUG=True (или true), то ( "true" == "true" ) вернет чистый True.
 # Если там написано DEBUG=False (или false), то ( "false" == "true" ) вернет чистый False.
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
-if DEBUG:
-    STATICFILES_DIRS = [os.path.join(BASE_DIR, "staticfiles")]
 
 # Читаем строку из .env
 # Если в .env ничего нет, по умолчанию подставится безопасный ["localhost", "127.0.0.1"]

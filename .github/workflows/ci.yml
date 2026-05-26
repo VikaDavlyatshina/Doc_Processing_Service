@@ -126,7 +126,7 @@ jobs:
             # Безопасно создаем .env из ключа PRODUCTION_ENV
             echo \"${{ secrets.PRODUCTION_ENV }}\" > .env
             
-            # Перезапускаем контейнеры со сборкой свежего кода
+            # Перезапускаем контейнеры со сборкой нового кода
             docker compose down
             docker compose up -d --build
             
@@ -139,6 +139,9 @@ jobs:
             # Инициализируем ролевые группы прав доступа
             docker compose exec -T backend python manage.py setup_moderator_group
             docker compose exec -T backend python manage.py setup_user_manager_group
+          
+            # Создаём суперпользователя
+            docker compose exec -T backend python manage.py setup_superuser
             
             # Очищаем старые неиспользуемые Docker-слои для экономии места на диске
             docker image prune -f
