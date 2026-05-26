@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from .models import User
 from .validators import (validate_avatar, validate_first_name,
-                         validate_last_name)
+                         validate_last_name, validate_password)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -12,8 +12,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
     Используется при регистрации нового пользователя.
     """
 
-    # Поле пароля: принимается при регистрации, но  не возвращается в ответе
-    password = serializers.CharField(write_only=True)
+    # Поле пароля с валидацией: принимается при регистрации, но  не возвращается в ответе
+    password = serializers.CharField(
+        write_only=True,
+        validators=[validate_password],
+    )
 
     # Поле телефона: необязательное при регистрации
     phone = PhoneNumberField(required=False)

@@ -29,14 +29,12 @@ urlpatterns = [
     # ========================================================================
     # УДАЛЕНИЕ ПРОФИЛЯ
     # ========================================================================
-    # DELETE /api/users/profile/delete/ - мягкое удаление (деактивация)
+    # DELETE /api/users/delete/ - мягкое удаление (деактивация)
     # Пользователь не может войти, но данные сохраняются
-    path("profile/delete/", UserSoftDeleteView.as_view(), name="user_soft_delete"),
+    path("delete/", UserSoftDeleteView.as_view(), name="user_soft_delete"),
     # ========================================================================
     # ВОССТАНОВЛЕНИЕ ПРОФИЛЯ (только администратор)
     # ========================================================================
     # POST /api/users/profile/restore/<id>/ - восстановить удалённого пользователя
-    path(
-        "profile/restore/<int:user_id>/", UserRestoreView.as_view(), name="user_restore"
-    ),
+    path("restore/<int:user_id>/", UserRestoreView.as_view(), name="user_restore"),
 ]

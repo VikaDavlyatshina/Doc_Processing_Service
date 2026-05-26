@@ -98,10 +98,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
         """
         # Удалить документ может только его владелец (проверка через кастомный permission)
         if self.action == "destroy":
-            return [permissions.IsAuthenticated, IsOwnerOnly]
+            return [permissions.IsAuthenticated(), IsOwnerOnly()]
 
         # Все остальные действия требуют только авторизации
-        return [permissions.IsAuthenticated]
+        return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
         """
@@ -204,6 +204,15 @@ class DocumentOwnerViewSet(viewsets.GenericViewSet):
         # Проверяем, что пользователь действительно приложил файл
         if not new_file:
             return Response({"error": "Файл не передан"}, status=400)
+
+        # Замена файла разрешена только для черновиков и отклонённых
+        if document.status not in ["draft", "rejected"]:
+            return Response(
+                {
+                    "error": f"Нельзя заменить файл в статусе: {document.get_status_display()}"
+                },
+                status=400,
+            )
 
         # Вызываем бизнес-логику замены файла из сервисного слоя
         result = replace_document_file(document, new_file, request.user)

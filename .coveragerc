@@ -1,13 +1,13 @@
 [run]
-source = .
+# Перечисляем папки с кодом через запятую.
+source = documents, users, config
+
 omit =
     */migrations/*
-    */tests/*
+    */tests*
     */admin.py
     */apps.py
     */management/*
-    */asgi.py
-    */wsgi.py
     manage.py
     config/settings.py
     config/urls.py
@@ -19,5 +19,9 @@ omit =
 [report]
 exclude_lines =
     pragma: no cover
-    if settings.DEBUG
-    if __name__ == .__main__.
+    if settings.DEBUG:
+    if __name__ == "__main__":
+    raise AssertionError
+    raise NotImplementedError
+    def __str__
+    def __repr__

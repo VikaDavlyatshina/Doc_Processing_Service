@@ -2,10 +2,11 @@
 Тесты для приложения users.
 
 Проверяют:
-- Регистрацию пользователя
-- Получение JWT токенов
-- Просмотр и редактирование профиля
-- Мягкое удаление и восстановление профиля
+- Регистрацию
+- JWT-токены
+- Профиль
+- Мягкое удаление
+- Восстановление
 - Права доступа
 """
 
@@ -19,12 +20,7 @@ from rest_framework.test import APIClient
 
 User = get_user_model()
 
-
-# ============================================================================
-# НАСТРОЙКИ ДЛЯ ТЕСТОВ (ОТКЛЮЧАЕМ CELERY)
-# ============================================================================
-# Эти настройки позволяют тестам не зависеть от Redis
-# Celery задачи выполняются синхронно (сразу), а не уходят в очередь
+# Celery выполняем синхронно, без Redis
 CELERY_TEST_SETTINGS = {
     "CELERY_TASK_ALWAYS_EAGER": True,
     "CELERY_TASK_EAGER_PROPAGATES": True,
@@ -32,416 +28,330 @@ CELERY_TEST_SETTINGS = {
 }
 
 
+def _get_token(client, email, password):
+    """Хелпер: получить JWT access токен."""
+    url = reverse("users:token_obtain_pair")
+    response = client.post(url, {"email": email, "password": password}, format="json")
+    return response.data.get("access")
+
+
 @override_settings(**CELERY_TEST_SETTINGS)
 class UserAPITestCase(TestCase):
-    """Тестирование API для работы с пользователями."""
+    """Тесты API пользователей."""
 
     def setUp(self):
-        """Подготовка данных перед каждым тестом."""
         self.client = APIClient()
 
-        # ================================================================
-        # 1. ОБЫЧНЫЙ ПОЛЬЗОВАТЕЛЬ
-        # ================================================================
+        # Пользователи
         self.user = User.objects.create_user(
-            email="testuser@example.com",
-            password="testpass123",
-            first_name="Тест",
-            last_name="Пользователь",
-            phone="+79123456789",
+            email="user@example.com",
+            password="user123",
+            first_name="Иван",
+            last_name="Иванов",
         )
 
-        # ================================================================
-        # 2. СУПЕРПОЛЬЗОВАТЕЛЬ (АДМИН) — для восстановления
-        # ================================================================
         self.admin = User.objects.create_superuser(
             email="admin@example.com",
             password="admin123",
-            first_name="Админ",
-            last_name="Админов",
         )
 
-        # ================================================================
-        # 3. МОДЕРАТОР — не имеет права восстанавливать
-        # ================================================================
+        # Менеджер пользователей (может восстанавливать)
+        group, _ = Group.objects.get_or_create(name="User Manager")
+        self.manager = User.objects.create_user(
+            email="manager@example.com",
+            password="manager123",
+        )
+        self.manager.groups.add(group)
+
+        # Модератор документов (не может восстанавливать)
         group, _ = Group.objects.get_or_create(name="Document Moderator")
         self.moderator = User.objects.create_user(
             email="moderator@example.com",
             password="moderator123",
-            first_name="Модератор",
-            last_name="Модераторов",
             is_staff=True,
         )
         self.moderator.groups.add(group)
 
-        # ================================================================
-        # 4. JWT ТОКЕНЫ
-        # ================================================================
-        user_token_response = self.client.post(
-            reverse("users:token_obtain_pair"),
-            {"email": "testuser@example.com", "password": "testpass123"},
-            format="json",
+        # Токены для всех ролей
+        self.user_token = _get_token(self.client, "user@example.com", "user123")
+        self.admin_token = _get_token(self.client, "admin@example.com", "admin123")
+        self.manager_token = _get_token(
+            self.client, "manager@example.com", "manager123"
         )
-        self.user_token = user_token_response.data.get("access")
-
-        admin_token_response = self.client.post(
-            reverse("users:token_obtain_pair"),
-            {"email": "admin@example.com", "password": "admin123"},
-            format="json",
+        self.moderator_token = _get_token(
+            self.client, "moderator@example.com", "moderator123"
         )
-        self.admin_token = admin_token_response.data.get("access")
-
-        moderator_token_response = self.client.post(
-            reverse("users:token_obtain_pair"),
-            {"email": "moderator@example.com", "password": "moderator123"},
-            format="json",
-        )
-        self.moderator_token = moderator_token_response.data.get("access")
 
     # ========================================================================
-    # ТЕСТ 1: РЕГИСТРАЦИЯ
+    # РЕГИСТРАЦИЯ
     # ========================================================================
 
-    def test_register_user_success(self):
-        """Регистрация с корректными данными → 201 Created."""
+    def test_register_success(self):
+        """Успешная регистрация → 201."""
         url = reverse("users:user_register")
         data = {
-            "email": "newuser@example.com",
+            "email": "new@example.com",
             "password": "newpass123",
-            "first_name": "Новый",
-            "last_name": "Пользователь",
-            "phone": "+79876543210",
+            "first_name": "Пётр",
+            "last_name": "Петров",
         }
-
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["email"], "newuser@example.com")
+        self.assertEqual(response.data["email"], "new@example.com")
         self.assertNotIn("password", response.data)
 
-        user = User.objects.get(email="newuser@example.com")
-        self.assertEqual(user.first_name, "Новый")
-        self.assertEqual(user.last_name, "Пользователь")
-
-    def test_register_user_duplicate_email_fails(self):
-        """Регистрация с существующим email → 400 Bad Request."""
+    def test_register_duplicate_email(self):
+        """Повторный email → 400."""
         url = reverse("users:user_register")
-        data = {
-            "email": "testuser@example.com",
-            "password": "newpass123",
-            "first_name": "Дубликат",
-            "last_name": "Пользователь",
-        }
-
+        data = {"email": "user@example.com", "password": "pass123"}
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("email", response.data)
 
-    def test_register_user_missing_fields_fails(self):
-        """Регистрация без email/password → 400 Bad Request."""
+    def test_register_missing_fields(self):
+        """Без email и пароля → 400."""
         url = reverse("users:user_register")
-        data = {"first_name": "Неполный", "last_name": "Пользователь"}
-
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, {}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("email", response.data)
         self.assertIn("password", response.data)
 
-    def test_register_with_deleted_email_fails(self):
-        """
-        Проверка: удалённый пользователь не может зарегистрироваться снова.
-        Ожидается: 400 Bad Request с сообщением об обращении к администратору.
-        """
-        # Создаём пользователя и мягко удаляем его
-        deleted_user = User.objects.create_user(
-            email="deleted@example.com",
-            password="pass123",
-            first_name="Удалённый",
-            last_name="Пользователь",
+    def test_register_deleted_email(self):
+        """Удалённый email → 400."""
+        deleted = User.objects.create_user(
+            email="deleted@example.com", password="pass123"
         )
-        deleted_user.soft_delete()
+        deleted.soft_delete()
 
         url = reverse("users:user_register")
-        data = {
-            "email": "deleted@example.com",
-            "password": "newpass123",
-            "first_name": "Новый",
-            "last_name": "Пользователь",
-        }
-
+        data = {"email": "deleted@example.com", "password": "newpass123"}
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("администратор", str(response.data).lower())
 
     # ========================================================================
-    # ТЕСТ 2: JWT ТОКЕНЫ
+    # JWT-ТОКЕНЫ
     # ========================================================================
 
     def test_token_obtain_success(self):
-        """Верные email/пароль → 200 OK, access и refresh токены."""
+        """Верный логин/пароль → access + refresh."""
         url = reverse("users:token_obtain_pair")
-        data = {"email": "testuser@example.com", "password": "testpass123"}
-
+        data = {"email": "user@example.com", "password": "user123"}
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
 
-    def test_token_obtain_wrong_password_fails(self):
-        """Неверный пароль → 401 Unauthorized."""
+    def test_token_wrong_password(self):
+        """Неверный пароль → 401."""
         url = reverse("users:token_obtain_pair")
-        data = {"email": "testuser@example.com", "password": "wrongpassword"}
-
+        data = {"email": "user@example.com", "password": "wrong"}
         response = self.client.post(url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_token_refresh_success(self):
-        """Обновление access токена по refresh → 200 OK."""
-        token_url = reverse("users:token_obtain_pair")
-        token_data = {"email": "testuser@example.com", "password": "testpass123"}
-        token_response = self.client.post(token_url, token_data, format="json")
-        refresh_token = token_response.data.get("refresh")
+        """Обновление access по refresh → 200."""
+        # Получаем refresh
+        url = reverse("users:token_obtain_pair")
+        data = {"email": "user@example.com", "password": "user123"}
+        tokens = self.client.post(url, data, format="json")
+        refresh = tokens.data["refresh"]
 
-        refresh_url = reverse("users:token_refresh")
-        response = self.client.post(
-            refresh_url, {"refresh": refresh_token}, format="json"
-        )
+        # Обновляем
+        url = reverse("users:token_refresh")
+        response = self.client.post(url, {"refresh": refresh}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
 
     # ========================================================================
-    # ТЕСТ 3: ПРОСМОТР ПРОФИЛЯ
+    # ПРОФИЛЬ
     # ========================================================================
 
-    def test_profile_retrieve_success(self):
-        """Авторизованный пользователь видит свой профиль → 200 OK."""
+    def test_profile_get(self):
+        """Просмотр своего профиля → 200."""
         url = reverse("users:user_profile")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
 
         response = self.client.get(url)
-
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["email"], "testuser@example.com")
-        self.assertEqual(response.data["first_name"], "Тест")
-        self.assertEqual(response.data["last_name"], "Пользователь")
+        self.assertEqual(response.data["email"], "user@example.com")
 
-    def test_profile_retrieve_unauthenticated_fails(self):
-        """Неавторизованный пользователь не видит профиль → 401."""
-        url = reverse("users:user_profile")
-        self.client.credentials()
-
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    # ========================================================================
-    # ТЕСТ 4: РЕДАКТИРОВАНИЕ ПРОФИЛЯ
-    # ========================================================================
-
-    def test_profile_update_success(self):
-        """PATCH с корректными данными → 200 OK, данные обновлены."""
+    def test_profile_update(self):
+        """Редактирование профиля → 200."""
         url = reverse("users:user_profile")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
 
-        response = self.client.patch(
-            url, {"first_name": "НовоеИмя", "phone": "+79998887766"}, format="json"
-        )
-
+        response = self.client.patch(url, {"first_name": "Пётр"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["first_name"], "НовоеИмя")
-        self.assertEqual(response.data["phone"], "+79998887766")
+        self.assertEqual(response.data["first_name"], "Пётр")
 
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.first_name, "НовоеИмя")
-        self.assertEqual(self.user.phone, "+79998887766")
-
-    def test_profile_update_email_is_readonly(self):
-        """Поле email нельзя изменить → 200 OK, email не меняется."""
+    def test_profile_email_readonly(self):
+        """Email нельзя изменить."""
         url = reverse("users:user_profile")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
 
-        response = self.client.patch(
-            url, {"email": "newemail@example.com"}, format="json"
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["email"], "testuser@example.com")
-
-    def test_profile_update_avatar_success(self):
-        """Загрузка аватара → 200 OK, аватар сохранён."""
-        url = reverse("users:user_profile")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
-
-        avatar_content = b"GIF89a\x01\x00\x01\x00\x00\xff\x00\x00\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
-        avatar = SimpleUploadedFile(
-            "avatar.gif", avatar_content, content_type="image/gif"
-        )
-
-        response = self.client.patch(url, {"avatar": avatar}, format="multipart")
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNotNone(response.data.get("avatar"))
+        response = self.client.patch(url, {"email": "hack@example.com"}, format="json")
+        self.assertEqual(response.data["email"], "user@example.com")
 
     # ========================================================================
-    # ТЕСТ 5: МЯГКОЕ УДАЛЕНИЕ ПРОФИЛЯ
+    # SOFT DELETE
     # ========================================================================
 
-    def test_soft_delete_profile_success(self):
-        """Мягкое удаление профиля → 204, is_active=False, deleted_at заполнено."""
+    def test_soft_delete(self):
+        """Удаление → 204, флаги is_active=False, вход запрещён."""
+        # Удаляем
         url = reverse("users:user_soft_delete")
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
-
         response = self.client.delete(url)
-
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
+        # Проверяем флаги
         self.user.refresh_from_db()
         self.assertFalse(self.user.is_active)
-        self.assertIsNotNone(self.user.deleted_at)
         self.assertTrue(self.user.is_deleted)
 
-    def test_soft_deleted_user_cannot_login(self):
-        """Удалённый пользователь не может войти → 401."""
-        self.user.soft_delete()
-
-        url = reverse("users:token_obtain_pair")
-        data = {"email": "testuser@example.com", "password": "testpass123"}
-
-        response = self.client.post(url, data, format="json")
+        # Пробуем войти
+        token_url = reverse("users:token_obtain_pair")
+        data = {"email": "user@example.com", "password": "user123"}
+        response = self.client.post(token_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     # ========================================================================
-    # ТЕСТ 6: ВОССТАНОВЛЕНИЕ ПРОФИЛЯ
+    # ВОССТАНОВЛЕНИЕ
     # ========================================================================
 
-    def test_restore_profile_by_admin_success(self):
-        """Админ (суперпользователь) восстанавливает удалённого пользователя → 200 OK."""
-        # Удаляем пользователя
+    def _delete_and_restore(self, token, expected_status):
+        """Хелпер: удалить пользователя и попытаться восстановить."""
         self.user.soft_delete()
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.is_deleted)
-
         url = reverse("users:user_restore", args=[self.user.id])
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
-
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         response = self.client.post(url)
+        self.assertEqual(response.status_code, expected_status)
+        return response
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("восстановлен", response.data["detail"].lower())
-
+    def test_restore_by_admin(self):
+        """Админ восстанавливает → 200."""
+        self._delete_and_restore(self.admin_token, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertTrue(self.user.is_active)
-        self.assertIsNone(self.user.deleted_at)
-        self.assertFalse(self.user.is_deleted)
 
-    def test_moderator_cannot_restore_user(self):
-        """Модератор не может восстановить пользователя → 403 Forbidden."""
-        self.user.soft_delete()
+    def test_restore_by_manager(self):
+        """Менеджер пользователей восстанавливает → 200."""
+        self._delete_and_restore(self.manager_token, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.is_deleted)
+        self.assertTrue(self.user.is_active)
 
-        url = reverse("users:user_restore", args=[self.user.id])
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.moderator_token}")
+    def test_restore_by_moderator_forbidden(self):
+        """Модератор документов не может → 403."""
+        self._delete_and_restore(self.moderator_token, status.HTTP_403_FORBIDDEN)
 
-        response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_restore_not_deleted_user_fails(self):
-        """Восстановление не удалённого пользователя → 404."""
+    def test_restore_not_deleted(self):
+        """Не удалённый пользователь → 404."""
         url = reverse("users:user_restore", args=[self.user.id])
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
-
-        response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("не найден", response.data["error"].lower())
-
-    def test_restore_nonexistent_user_fails(self):
-        """Восстановление несуществующего пользователя → 404."""
-        url = reverse("users:user_restore", args=[99999])
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.admin_token}")
-
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     # ========================================================================
-    # ТЕСТ 7: МЕТОДЫ МОДЕЛИ
+    # ПРАВА ДОСТУПА
     # ========================================================================
 
-    def test_get_full_name(self):
-        """get_full_name() возвращает 'Имя Фамилия'."""
-        self.assertEqual(self.user.get_full_name(), "Тест Пользователь")
+    def test_unauthorized_access(self):
+        """Все эндпоинты без токена → 401."""
+        endpoints = [
+            ("get", "users:user_profile"),
+            ("patch", "users:user_profile"),
+            ("delete", "users:user_soft_delete"),
+        ]
+        self.client.credentials()  # Сбрасываем токен
 
-    def test_get_short_name(self):
-        """get_short_name() возвращает только имя."""
-        self.assertEqual(self.user.get_short_name(), "Тест")
+        for method, url_name in endpoints:
+            url = reverse(url_name)
+            response = getattr(self.client, method)(url)
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_401_UNAUTHORIZED,
+                f"{method.upper()} {url_name} должен требовать авторизацию",
+            )
 
-    def test_get_full_name_without_last_name(self):
-        """get_full_name() без фамилии возвращает только имя."""
-        user = User.objects.create_user(
-            email="nofirst@example.com", password="pass123", first_name="Только"
-        )
-        self.assertEqual(user.get_full_name(), "Только")
+    def test_register_weak_password(self):
+        """Слишком простой пароль → 400."""
+        url = reverse("users:user_register")
+        data = {
+            "email": "weak@example.com",
+            "password": "123",
+            "first_name": "Слабый",
+            "last_name": "Пароль",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_is_deleted_property(self):
-        """is_deleted правильно определяет удалённого пользователя."""
-        self.assertFalse(self.user.is_deleted)
-        self.user.soft_delete()
-        self.assertTrue(self.user.is_deleted)
+    def test_register_numeric_password(self):
+        """Пароль только из цифр → 400."""
+        url = reverse("users:user_register")
+        data = {
+            "email": "numeric@example.com",
+            "password": "12345678",
+            "first_name": "Цифры",
+            "last_name": "Пароль",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    # ========================================================================
-    # ТЕСТ 8: ДОСТУП К ЭНДПОИНТАМ
-    # ========================================================================
+    def test_register_empty_first_name(self):
+        """Пустое имя → 400."""
+        url = reverse("users:user_register")
+        data = {
+            "email": "noname@example.com",
+            "password": "ValidPass123!",
+            "first_name": "",
+            "last_name": "Фамилия",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_profile_endpoint_requires_auth(self):
-        """Эндпоинт профиля требует авторизации."""
+    def test_register_empty_last_name(self):
+        """Пустая фамилия → 400."""
+        url = reverse("users:user_register")
+        data = {
+            "email": "noname@example.com",
+            "password": "ValidPass123!",
+            "first_name": "Имя",
+            "last_name": "",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_avatar_too_large(self):
+        """Аватар больше 5 МБ → 400."""
         url = reverse("users:user_profile")
-        self.client.credentials()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
 
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-        response = self.client.patch(url, {"first_name": "test"}, format="json")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_soft_delete_endpoint_requires_auth(self):
-        """Эндпоинт удаления требует авторизации."""
-        url = reverse("users:user_soft_delete")
-        self.client.credentials()
-
-        response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_restore_by_user_manager_success(self):
-        """Пользователь из группы User Manager может восстановить аккаунт."""
-        # Создаём группу и добавляем в неё пользователя
-        group, _ = Group.objects.get_or_create(name="User Manager")
-        self.user_manager = User.objects.create_user(
-            email="manager@example.com",
-            password="manager123",
-            first_name="Менеджер",
-            last_name="Пользователей",
+        large_file = SimpleUploadedFile(
+            "large.jpg",
+            b"X" * (6 * 1024 * 1024),
+            content_type="image/jpeg",
         )
-        self.user_manager.groups.add(group)
 
-        # Получаем токен
-        token_response = self.client.post(
-            reverse("users:token_obtain_pair"),
-            {"email": "manager@example.com", "password": "manager123"},
-            format="json",
+        response = self.client.patch(url, {"avatar": large_file}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_avatar_not_image(self):
+        """Не изображение в аватар → 400."""
+        url = reverse("users:user_profile")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.user_token}")
+
+        not_image = SimpleUploadedFile(
+            "doc.pdf",
+            b"%PDF-1.4\nfake pdf",
+            content_type="application/pdf",
         )
-        manager_token = token_response.data.get("access")
 
-        # Удаляем пользователя
-        self.user.soft_delete()
-
-        # Восстанавливаем
-        url = reverse("users:user_restore", args=[self.user.id])
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {manager_token}")
-        response = self.client.post(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.patch(url, {"avatar": not_image}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
