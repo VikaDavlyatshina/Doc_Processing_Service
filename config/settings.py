@@ -11,16 +11,20 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Локально читаем .env, в Docker переменные уже загружены через env_file
-if not os.path.exists("/.dockerenv"):
-    load_dotenv(".env", override=True)
+from celery.schedules import crontab
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Загружаем .env только если мы НЕ в Docker
+if not os.path.exists("/.dockerenv"):
+    env_path = os.path.join(BASE_DIR, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(env_path, override=True)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -29,53 +33,73 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+# Извлекаем значение из .env, переводим в нижний регистр (.lower())
+# и сравниваем со строкой "true", чтобы не зависеть от регистра букв.
+# Если в .env написано DEBUG=True (или true), то ( "true" == "true" ) вернет чистый True.
+# Если там написано DEBUG=False (или false), то ( "false" == "true" ) вернет чистый False.
+DEBUG = os.getenv("DEBUG", "true").lower() == "true"
+
+# Читаем строку из .env
+# Если в .env ничего нет, по умолчанию подставится безопасный ["localhost", "127.0.0.1"]
+# .strip() очистит адреса от пробелов
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    # Приложения
-    'users',
-    'documents',
+    # Стандартные приложения Django
+    "django.contrib.admin",  # Админ-панель (yourdomain.ru/admin/)
+    "django.contrib.auth",  # Пользователи, группы, права доступа
+    "django.contrib.contenttypes",  # Связи между моделями (служебное)
+    "django.contrib.sessions",  # Хранение сессий пользователей
+    "django.contrib.messages",  # Всплывающие сообщения (успех, ошибка)
+    "django.contrib.staticfiles",  # Работа со статикой (CSS, JS, картинки)
+    # Сторонние библиотеки
+    "rest_framework",  # Django REST Framework — создание API
+    "rest_framework_simplejwt",  # JWT-токены для безопасной авторизации через API
+    "django_filters",  # Фильтрация данных в API (поиск, сортировка)
+    "django_celery_beat",  # Планировщик задач Celery (периодические задачи)
+    "drf_spectacular",  # Современная автодокументация API (OpenAPI 3.0)
+    "corsheaders",  # Разрешает запросы к API с других доменов (нужно для фронтенда)
+    # Приложения проекта
+    "users",
+    "documents",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / "templates"],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # Database
@@ -114,51 +138,58 @@ AUTH_PASSWORD_VALIDATORS = [
         # Запрещает пароли, состоящие только из цифр (12345678)
     },
 ]
+# ============================================
+# ИНТЕРНАЦИОНАЛИЗАЦИЯ И ВРЕМЯ
+# ============================================
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-# Язык интерфейса (кнопки, надписи в админке)
-LANGUAGE_CODE = "en-us"
+# Язык интерфейса по умолчанию (например, (кнопки, надписи в админке)
+LANGUAGE_CODE = os.getenv("LANGUAGE_CODE")
 
-# Часовой пояс
-TIME_ZONE = 'UTC'
+# Основной часовой пояс проекта
+TIME_ZONE = os.getenv("TIME_ZONE")
 
 # Интернационализация (переводы на другие языки)
 USE_I18N = True
 
-# Использовать часовые пояса (хранить время в UTC, показывать в локальном)
+# Хранить время в БД в UTC, но в коде и админке показывать в локальном TIME_ZONE
 USE_TZ = True
 
+# Тип поля по умолчанию для первичных ключей (ID моделей)
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ============================================
-# СТАТИЧЕСКИЕ И МЕДИА ФАЙЛЫ
+# ГЛОБАЛЬНЫЕ АДРЕСА ПРОЕКТА (SITE & EMAIL)
 # ============================================
+# Базовый URL сайта для формирования ссылок в письмах и медиа-файлах
+SITE_URL = os.getenv("SITE_URL")
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
+# Email администратора для получения уведомлений о новых документах от Celery
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
-# URL для доступа к статике (CSS, JS, картинки сайта)
-STATIC_URL = "static/"
 
-# Где искать статические файлы
-if DEBUG:
-    # Разработка: ищем здесь
-    STATICFILES_DIRS = [BASE_DIR / "static"]
-else:
-    # Папка, куда collectstatic собирает ВСЮ статику для продакшена
-    # После деплоя запустить: python manage.py collectstatic
-    # Продакшен: собираем сюда
-    STATIC_ROOT = BASE_DIR / "staticfiles"
+# ============================================
+# СТАТИКА И МЕДИА (Для совместной работы с Nginx)
+# ============================================
+# URL-префиксы для доступа к файлам через браузер
+STATIC_URL = "/static/"
 
-# URL для доступа к медиа-файлам (загруженные пользователем файлы)
-MEDIA_URL = "media/"
+# Django строит абсолютные ссылки http://localhost:8080/media/...
+MEDIA_URL = f"{SITE_URL}/media/"
 
-# Папка, где хранятся загруженные пользователями файлы
+# --- ФИЗИЧЕСКИЕ ПАПКИ НА ДИСКЕ ---
+
+# Куда Django соберет всю статику проекта для Nginx при выполнении collectstatic
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+# Куда физически загружаются файлы пользователей (документы, аватары)
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-# ТИП ПОЛЯ ПО УМОЛЧАНИЮ ДЛЯ ПЕРВИЧНЫХ КЛЮЧЕЙ
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# Дополнительные папки со статикой (используются только во время разработки)
+if DEBUG:
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
 # ============================================
 # КАСТОМНАЯ МОДЕЛЬ ПОЛЬЗОВАТЕЛЯ
@@ -167,3 +198,163 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Вместо стандартной модели User используется своя (users.User)
 # Позволяет добавить свои поля (телефон, аватар, дата рождения)
 AUTH_USER_MODEL = "users.User"
+
+
+# ============================================
+# DJANGO REST FRAMEWORK
+# ============================================
+REST_FRAMEWORK = {
+    # Фильтрация по умолчанию (поиск и сортировка в API)
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+    # Способ аутентификации через JWT-токены (вместо сессий/куки)
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+    # Доступ по умолчанию: только авторизованные пользователи
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    # Генератор OpenAPI-схемы для автодокументации
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ============================================
+# JWT (JSON Web Token)
+# ============================================
+
+SIMPLE_JWT = {
+    # Access-токен: короткий (30 минут), передаётся с каждым запросом
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    # Refresh-токен: длинный (1 день), нужен чтобы получить новый access
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Тип токена в заголовке: Authorization: Bearer <токен>
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# ============================================
+# НАСТРОЙКИ ДЛЯ ОТПРАВКИ ПИСЕМ
+# ============================================
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT"))
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "True").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+SERVER_EMAIL = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+
+# ============================================
+# НАСТРОЙКИ ДОКУМЕНТАЦИИ API (Swagger/OpenAPI)
+# ============================================
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Docs Processing API",  # Название API
+    "DESCRIPTION": "API для сервиса управления загружаемыми документами.",  # Описание
+    "VERSION": "1.0.0",  # Версия API
+    "SERVE_INCLUDE_SCHEMA": False,  # Не показывать схему в ответах API
+    "TAGS": [
+        # --- Приложение ДОКУМЕНТЫ ---
+        {
+            "name": "documents",
+            "description": "📄 Документы: Базовые операции (Просмотр и создание)",
+        },
+        {
+            "name": "documents-owner",
+            "description": "👤 Документы: Кабинет владельца (Отправка на проверку, замена файла)",
+        },
+        {
+            "name": "documents-moderation",
+            "description": "⚖️ Документы: Панель модератора (Утверждение и отклонение)",
+        },
+        # --- Приложение ПОЛЬЗОВАТЕЛИ ---
+        {
+            "name": "users",
+            "description": "🔐 Пользователи: Регистрация и авторизация (JWT)",
+        },
+        {
+            "name": "users-profile",
+            "description": "👤 Пользователи: Личный кабинет (Профиль и удаление)",
+        },
+        {
+            "name": "users-admin",
+            "description": "🛠️ Пользователи: Панель администратора (Восстановление аккаунтов)",
+        },
+    ],
+}
+
+# ============================================
+# REDIS (брокер для Celery)
+# ============================================
+# Добавляем безопасные дефолты на случай, если .env не прочитался
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+REDIS_DB = os.getenv("REDIS_DB", "0")
+
+# ============================================
+# CELERY
+# ============================================
+# Куда класть задачи (брокер)
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Где хранить результаты выполнения (бэкенд)
+CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Часовой пояс для задач (использует TIME_ZONE из .env, который мы настроили ранее)
+CELERY_TIMEZONE = TIME_ZONE
+
+# Логировать начало каждой задачи
+CELERY_TASK_TRACK_STARTED = True
+
+# Максимальное время выполнения задачи (30 минут)
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# Оптимизация для Windows (чтобы задачи не теряли сериализацию)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+
+# ============================================
+# РАСПИСАНИЕ ПЕРИОДИЧЕСКИХ ЗАДАЧ (CELERY BEAT)
+# ============================================
+
+# Где хранить расписание (Включаем совмещенный с админкой  режим)
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+# Стартовое расписание, которое автоматически скопируется в базу данных
+CELERY_BEAT_SCHEDULE = {
+    "check-overdue-documents-every-2-hours": {
+        "task": "documents.tasks.check_overdue_documents",
+        "schedule": crontab(minute="0", hour="*/2"),
+    },
+}
+
+# ============================================
+# CSRF (Cross-Site Request Forgery Protection)
+# ============================================
+# Читаем список доверенных адресов для защиты форм из .env
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"
+    ).split(",")
+]
+
+# ============================================
+# CORS (Cross-Origin Resource Sharing)
+# ============================================
+# Разрешаем фронтенду передавать заголовки авторизации (JWT-токены Bearer)
+CORS_ALLOW_CREDENTIALS = True
+
+# Читаем список сайтов фронтенда из .env и превращаем в Python-список (list).
+
+# В файл .env пишем адреса ФРОНТЕНДА ( Vue, React, Next.js, Nuxt или LMS-систем ).
+# Записываем через запятую, без пробелов, обязательно с http:// или https:// и портами.
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://127.0.0.1:8080",
+    ).split(",")
+]

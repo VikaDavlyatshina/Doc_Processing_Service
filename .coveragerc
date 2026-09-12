@@ -1,0 +1,27 @@
+[run]
+# Перечисляем папки с кодом через запятую.
+source = documents, users, config
+
+omit =
+    */migrations/*
+    */tests*
+    */admin.py
+    */apps.py
+    */management/*
+    manage.py
+    config/settings.py
+    config/urls.py
+    config/wsgi.py
+    config/asgi.py
+    config/celery.py
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if settings.DEBUG:
+    if __name__ == "__main__":
+    raise AssertionError
+    raise NotImplementedError
+    def __str__
+    def __repr__
